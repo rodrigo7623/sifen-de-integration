@@ -26,6 +26,3 @@ frontend/.env.local
 
 # Logs
 *.log
-
-# Docker volumes
-pgdata/
