@@ -27,19 +27,23 @@ Seguimos el plan de releases definido en la planificación (3 releases de 3 sema
 ```
 sifen-de-integration/
 ├── backend/     # Spring Boot 3 (Java 21) — API REST
-├── frontend/    # React + TypeScript + Vite — panel de control
-└── docker-compose.yml   # Postgres 16 para desarrollo local
+└── frontend/    # React + TypeScript + Vite — panel de control
 ```
 
 ## Cómo levantar el entorno de desarrollo
 
 ### 1. Base de datos
 
-```bash
-docker compose up -d
+El proyecto usa una instancia de **PostgreSQL 18 local** (no Docker). Con el servicio de Postgres
+corriendo, crear una única vez el rol y la base de datos de la app:
+
+```sql
+CREATE ROLE sifen WITH LOGIN PASSWORD 'sifen';
+CREATE DATABASE sifen_db OWNER sifen;
 ```
 
-Levanta Postgres 16 en `localhost:5432` (db `sifen_db`, usuario `sifen`, password `sifen`).
+El backend se conecta a `localhost:5432/sifen_db` con ese rol (ver `application.yml`); Flyway crea
+las tablas al arrancar la aplicación, no hace falta crearlas a mano.
 
 ### 2. Backend
 
