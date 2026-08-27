@@ -1,8 +1,6 @@
 # Sistema de Facturación Electrónica SIFEN — Tottal Store
 
-Monorepo del sistema desarrollado para el Proyecto II (LCIK, Facultad Politécnica – UNA). Ver la
-documentación de planificación y diseño en `../Proyecto1_SIFEN_Version_Final.docx-1.pdf` y
-`../Proyecto2_Planificacion_SIFEN-1.pdf`.
+Repo del sistema desarrollado para el Proyecto II (LCIK, Facultad Politécnica – UNA).
 
 ## Estado del desarrollo
 
@@ -19,8 +17,7 @@ Seguimos el plan de releases definido en la planificación (3 releases de 3 sema
 > Las integraciones con la SET/SIFEN (validación de RUC, firma digital XAdES, envío del DTE) están
 > implementadas como **stubs** detrás de interfaces (`ValidadorRuc`, `FirmaDigitalService`,
 > `EnviadorSifenService`) para poder avanzar sin certificado ni acceso al ambiente de homologación
-> todavía. Cuando se disponga de esos accesos, se agregan nuevas implementaciones sin tocar el resto
-> del sistema (RNF-09).
+> todavía. (RNF-09).
 
 ## Estructura
 
@@ -70,39 +67,6 @@ npm run dev
 
 SPA disponible en `http://localhost:5173`, apuntando por defecto a `http://localhost:8080/api`
 (configurable en `frontend/.env`, ver `.env.example`).
-
-## Solución de problemas
-
-**Maven falla al descargar dependencias con `PKIX path building failed`.** Ocurre si tu antivirus
-(por ejemplo Kaspersky Endpoint Security) o el proxy de la red intercepta el tráfico HTTPS con un
-certificado propio: Windows y el navegador confían en él, pero el almacén de confianza (`cacerts`)
-del JDK es independiente y no lo conoce. Solución (no requiere permisos de administrador):
-
-```powershell
-# 1. Exportar el certificado raíz que intercepta el tráfico (ajustar host si hace falta)
-$hostName = "repo.maven.apache.org"
-$tcp = New-Object System.Net.Sockets.TcpClient($hostName, 443)
-$sslStream = New-Object System.Net.Security.SslStream($tcp.GetStream(), $false, ({$true}))
-$sslStream.AuthenticateAsClient($hostName)
-$chain = New-Object System.Security.Cryptography.X509Certificates.X509Chain
-$chain.Build($sslStream.RemoteCertificate) | Out-Null
-$root = $chain.ChainElements[$chain.ChainElements.Count - 1].Certificate
-[System.IO.File]::WriteAllBytes("$env:TEMP\root-ca.cer", $root.Export("Cert"))
-
-# 2. Copiar el cacerts del JDK a una carpeta donde sí tengas permiso de escritura
-$cacerts = "$env:USERPROFILE\.m2\jdk21-cacerts"
-Copy-Item "C:\Program Files\Java\jdk-21\lib\security\cacerts" $cacerts
-
-# 3. Importar el certificado a esa copia (password por defecto: changeit)
-& "C:\Program Files\Java\jdk-21\bin\keytool.exe" -importcert -trustcacerts -noprompt `
-  -alias root-ca -file "$env:TEMP\root-ca.cer" -keystore $cacerts -storepass changeit
-
-# 4. Usar esa copia al invocar Maven
-$env:MAVEN_OPTS = "-Djavax.net.ssl.trustStore=$cacerts -Djavax.net.ssl.trustStorePassword=changeit"
-```
-
-Repetir el paso 4 (`$env:MAVEN_OPTS = ...`) en cada terminal nueva, o agregarlo como variable de
-entorno de usuario para que quede permanente.
 
 ## Convenciones
 
