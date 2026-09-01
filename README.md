@@ -75,6 +75,22 @@ npm run dev
 SPA disponible en `http://localhost:5173`, apuntando por defecto a `http://localhost:8080/api`
 (configurable en `frontend/.env`, ver `.env.example`).
 
+## Probar la API con Postman
+
+Importar `postman/SIFEN-Tottal-Store.postman_collection.json` en Postman. Incluye las carpetas
+Auth, Productos, Clientes y Facturas, con el flujo completo de M1/M5.
+
+1. Correr **Auth → Login** primero: guarda el token JWT automáticamente en la variable de colección
+   `token` (el resto de las requests ya usan Bearer Auth heredado, no hay que copiar nada a mano).
+2. **Facturas → Crear borrador** guarda el id de la factura creada en la variable `facturaId`, que
+   usan automáticamente **Editar borrador** y **Confirmar**.
+3. Variables editables en la colección: `baseUrl` (por defecto `http://localhost:8080/api`),
+   `clienteRuc` y `productoCodigo` (usar un RUC/código que ya exista o crearlo primero con las
+   requests de Clientes/Productos).
+
+El token expira a las 8 horas (`sifen.security.jwt.expiration-minutes`); si empiezan a fallar las
+requests con 401, correr Login de nuevo.
+
 ## Solución de problemas
 
 **Maven falla al descargar dependencias con `PKIX path building failed`.** Ocurre si tu antivirus

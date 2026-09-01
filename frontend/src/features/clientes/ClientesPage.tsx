@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { extraerMensajeError } from "../../api/client";
+import { useAuth } from "../../auth/AuthContext";
 import { CONDICION_IVA_LABEL, type Cliente, type CondicionIva } from "../../api/types";
 import { clientesApi, type ClienteInput } from "./api";
 
@@ -12,6 +13,8 @@ const FORM_VACIO: ClienteInput = {
 };
 
 export function ClientesPage() {
+  const { usuario } = useAuth();
+  const esAdmin = usuario?.rol === "ADMIN";
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [busqueda, setBusqueda] = useState("");
   const [cargando, setCargando] = useState(false);
@@ -26,12 +29,13 @@ export function ClientesPage() {
     mensaje: null,
     valido: true,
   });
+  const [mostrarInactivos, setMostrarInactivos] = useState(false);
 
-  async function cargar(q?: string) {
+  async function cargar(q?: string, incluirInactivos = mostrarInactivos) {
     setCargando(true);
     setError(null);
     try {
-      setClientes(await clientesApi.buscar(q));
+      setClientes(await clientesApi.buscar(q, esAdmin && incluirInactivos));
     } catch (err) {
       setError(extraerMensajeError(err, "No se pudieron cargar los clientes"));
     } finally {
@@ -40,9 +44,9 @@ export function ClientesPage() {
   }
 
   useEffect(() => {
-    cargar();
+    cargar(busqueda, mostrarInactivos);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [mostrarInactivos]);
 
   function abrirNuevo() {
     setEditandoRuc(null);
@@ -111,7 +115,7 @@ export function ClientesPage() {
     <div>
       <div className="page-header">
         <h1>Gestión de clientes</h1>
-        <button onClick={abrirNuevo}>+ Nuevo cliente</button>
+        {esAdmin && <button onClick={abrirNuevo}>+ Nuevo cliente</button>}
       </div>
 
       <div className="toolbar">
@@ -124,6 +128,16 @@ export function ClientesPage() {
         <button className="secondary" onClick={() => cargar(busqueda)}>
           Buscar
         </button>
+        {esAdmin && (
+          <label className="checkbox-inline">
+            <input
+              type="checkbox"
+              checked={mostrarInactivos}
+              onChange={(e) => setMostrarInactivos(e.target.checked)}
+            />
+            Mostrar inactivos
+          </label>
+        )}
       </div>
 
       {error && <p className="error-text">{error}</p>}
@@ -153,13 +167,19 @@ export function ClientesPage() {
                 </span>
               </td>
               <td className="actions">
-                <button className="link-button" onClick={() => abrirEdicion(c)}>
-                  Editar
-                </button>
-                {c.activo && (
-                  <button className="link-button danger" onClick={() => onDesactivar(c)}>
-                    Desactivar
-                  </button>
+                {esAdmin ? (
+                  <>
+                    <button className="link-button" onClick={() => abrirEdicion(c)}>
+                      Editar
+                    </button>
+                    {c.activo && (
+                      <button className="link-button danger" onClick={() => onDesactivar(c)}>
+                        Desactivar
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <span className="hint-text">Solo lectura</span>
                 )}
               </td>
             </tr>

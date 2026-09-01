@@ -31,8 +31,10 @@ public class ClienteController {
     }
 
     @GetMapping
-    public List<ClienteResponse> buscar(@RequestParam(required = false) String q) {
-        return clienteService.buscar(q).stream().map(ClienteResponse::from).toList();
+    public List<ClienteResponse> buscar(
+            @RequestParam(required = false) String q,
+            @RequestParam(name = "incluirInactivos", defaultValue = "false") boolean incluirInactivos) {
+        return clienteService.buscar(q, incluirInactivos).stream().map(ClienteResponse::from).toList();
     }
 
     @GetMapping("/{ruc}")

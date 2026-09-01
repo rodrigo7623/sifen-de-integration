@@ -10,8 +10,8 @@ export interface ClienteInput {
 }
 
 export const clientesApi = {
-  async buscar(q?: string): Promise<Cliente[]> {
-    const { data } = await apiClient.get<Cliente[]>("/clientes", { params: { q } });
+  async buscar(q?: string, incluirInactivos?: boolean): Promise<Cliente[]> {
+    const { data } = await apiClient.get<Cliente[]>("/clientes", { params: { q, incluirInactivos } });
     return data;
   },
   async crear(input: ClienteInput): Promise<Cliente> {
