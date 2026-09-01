@@ -17,7 +17,7 @@ export function LoginPage() {
     setCargando(true);
     try {
       await login(email, password);
-      navigate("/productos");
+      navigate("/facturas");
     } catch (err) {
       setError(extraerMensajeError(err, "No se pudo iniciar sesión"));
     } finally {

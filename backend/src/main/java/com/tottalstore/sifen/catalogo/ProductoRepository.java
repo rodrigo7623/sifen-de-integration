@@ -9,6 +9,8 @@ public interface ProductoRepository extends JpaRepository<Producto, String> {
 
     List<Producto> findByActivoTrueOrderByDescripcionAsc();
 
+    List<Producto> findAllByOrderByDescripcionAsc();
+
     @Query("""
             select p from Producto p
             where p.activo = true
@@ -17,4 +19,12 @@ public interface ProductoRepository extends JpaRepository<Producto, String> {
             order by p.descripcion asc
             """)
     List<Producto> buscar(@Param("q") String q);
+
+    @Query("""
+            select p from Producto p
+            where lower(p.codigo) like lower(concat('%', :q, '%'))
+               or lower(p.descripcion) like lower(concat('%', :q, '%'))
+            order by p.descripcion asc
+            """)
+    List<Producto> buscarTodos(@Param("q") String q);
 }

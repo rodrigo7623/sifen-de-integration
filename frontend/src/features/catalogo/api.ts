@@ -10,8 +10,8 @@ export interface ProductoInput {
 }
 
 export const productosApi = {
-  async buscar(q?: string): Promise<Producto[]> {
-    const { data } = await apiClient.get<Producto[]>("/productos", { params: { q } });
+  async buscar(q?: string, incluirInactivos?: boolean): Promise<Producto[]> {
+    const { data } = await apiClient.get<Producto[]>("/productos", { params: { q, incluirInactivos } });
     return data;
   },
   async crear(input: ProductoInput): Promise<Producto> {

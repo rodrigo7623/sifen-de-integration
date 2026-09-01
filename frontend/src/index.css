@@ -200,9 +200,24 @@ label {
 
 .toolbar {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 16px;
   max-width: 480px;
+}
+
+.checkbox-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--texto-suave);
+  white-space: nowrap;
+}
+
+.checkbox-inline input {
+  width: auto;
 }
 
 .data-table {
@@ -269,6 +284,34 @@ label {
 
 .hint-text.success {
   color: var(--verde);
+}
+
+/* Formulario de factura manual */
+.factura-section {
+  background: white;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 16px 20px 20px;
+  margin-bottom: 16px;
+}
+
+.factura-section legend {
+  font-weight: 600;
+  color: var(--azul-oscuro);
+  padding: 0 6px;
+}
+
+.factura-section[disabled] {
+  opacity: 0.75;
+}
+
+.factura-section label {
+  display: inline-block;
+  margin-right: 4px;
+}
+
+.factura-section .toolbar {
+  max-width: none;
 }
 
 /* Modal */
