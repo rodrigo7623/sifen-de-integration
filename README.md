@@ -8,10 +8,11 @@ Seguimos el plan de releases definido en la planificación (3 releases de 3 sema
 
 - **Release 1 — Núcleo de facturación manual (Semanas 1–3, Homologación)**
   - [x] Infraestructura y base de datos (Postgres + Flyway)
-  - [x] Autenticación y control de acceso por roles (JWT)
+  - [x] Autenticación y control de acceso por roles (JWT + RBAC ADMIN/OPERARIO)
   - [x] M5 — Catálogo de productos y gestión de clientes (validación de RUC)
-  - [x] M1 — Modelo de factura manual, cálculo de IVA y borrador (backend)
-  - [ ] M1 — Formulario de factura manual (frontend)
+  - [x] M1 — Factura manual (backend + formulario en frontend), cálculo de IVA y borrador
+  - [x] ABM de usuarios (solo ADMIN)
+  - [ ] Verificación manual en navegador de las 6 pantallas antes de cerrar el release
   - [ ] Firma digital X.509 real y envío SIFEN real (por ahora **stubs**, ver abajo)
 
 > Las integraciones con la SET/SIFEN (validación de RUC, firma digital XAdES, envío del DTE) están
@@ -24,7 +25,8 @@ Seguimos el plan de releases definido en la planificación (3 releases de 3 sema
 ```
 sifen-de-integration/
 ├── backend/     # Spring Boot 3 (Java 21) — API REST
-└── frontend/    # React + TypeScript + Vite — panel de control
+├── frontend/    # React + TypeScript + Vite — panel de control
+└── postman/     # Colección para probar la API manualmente
 ```
 
 ## Cómo levantar el entorno de desarrollo
@@ -71,6 +73,22 @@ npm run dev
 
 SPA disponible en `http://localhost:5173`, apuntando por defecto a `http://localhost:8080/api`
 (configurable en `frontend/.env`, ver `.env.example`).
+
+## Probar la API con Postman
+
+Importar `postman/SIFEN-Tottal-Store.postman_collection.json` en Postman. Incluye las carpetas
+Auth, Productos, Clientes, Facturas y Usuarios, con el flujo completo de M1/M5 y el ABM de usuarios.
+
+1. Correr **Auth → Login** primero: guarda el token JWT automáticamente en la variable de colección
+   `token` (el resto de las requests ya usan Bearer Auth heredado, no hay que copiar nada a mano).
+2. **Facturas → Crear borrador** guarda el id de la factura creada en la variable `facturaId`, que
+   usan automáticamente **Editar borrador** y **Confirmar**.
+3. Variables editables en la colección: `baseUrl` (por defecto `http://localhost:8080/api`),
+   `clienteRuc` y `productoCodigo` (usar un RUC/código que ya exista o crearlo primero con las
+   requests de Clientes/Productos).
+
+El token expira a las 8 horas (`sifen.security.jwt.expiration-minutes`); si empiezan a fallar las
+requests con 401, correr Login de nuevo.
 
 ## Convenciones
 

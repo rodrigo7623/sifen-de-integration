@@ -27,8 +27,10 @@ public class ProductoController {
     }
 
     @GetMapping
-    public List<ProductoResponse> buscar(@RequestParam(required = false) String q) {
-        return productoService.buscar(q).stream().map(ProductoResponse::from).toList();
+    public List<ProductoResponse> buscar(
+            @RequestParam(required = false) String q,
+            @RequestParam(name = "incluirInactivos", defaultValue = "false") boolean incluirInactivos) {
+        return productoService.buscar(q, incluirInactivos).stream().map(ProductoResponse::from).toList();
     }
 
     @GetMapping("/{codigo}")

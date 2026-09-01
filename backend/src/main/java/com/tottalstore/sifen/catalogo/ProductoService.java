@@ -17,11 +17,13 @@ public class ProductoService {
         this.productoRepository = productoRepository;
     }
 
-    public List<Producto> buscar(String q) {
+    public List<Producto> buscar(String q, boolean incluirInactivos) {
         if (q == null || q.isBlank()) {
-            return productoRepository.findByActivoTrueOrderByDescripcionAsc();
+            return incluirInactivos
+                    ? productoRepository.findAllByOrderByDescripcionAsc()
+                    : productoRepository.findByActivoTrueOrderByDescripcionAsc();
         }
-        return productoRepository.buscar(q.trim());
+        return incluirInactivos ? productoRepository.buscarTodos(q.trim()) : productoRepository.buscar(q.trim());
     }
 
     public Producto obtener(String codigo) {

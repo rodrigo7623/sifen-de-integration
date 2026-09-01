@@ -66,7 +66,11 @@ public class FacturaElectronica {
     @Column(name = "fecha_emision")
     private Instant fechaEmision = Instant.now();
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    // EAGER a propósito: FacturaResponse.from() siempre necesita razón social del cliente al leer
+    // una factura, y open-in-view=false hace que un proxy LAZY explote (LazyInitializationException)
+    // fuera del método @Transactional que cargó la factura. Es un @ManyToOne, no un @OneToMany: no
+    // genera problema de N+1, Hibernate lo resuelve con un JOIN.
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "cliente_ruc", referencedColumnName = "ruc")
     private Cliente cliente;
 

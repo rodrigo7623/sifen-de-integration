@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { extraerMensajeError } from "../../api/client";
+import { useAuth } from "../../auth/AuthContext";
 import { TASA_IVA_LABEL, type Producto, type TasaIva } from "../../api/types";
 import { productosApi, type ProductoInput } from "./api";
 
@@ -12,6 +13,8 @@ const FORM_VACIO: ProductoInput = {
 };
 
 export function ProductosPage() {
+  const { usuario } = useAuth();
+  const esAdmin = usuario?.rol === "ADMIN";
   const [productos, setProductos] = useState<Producto[]>([]);
   const [busqueda, setBusqueda] = useState("");
   const [cargando, setCargando] = useState(false);
@@ -21,12 +24,13 @@ export function ProductosPage() {
   const [editandoCodigo, setEditandoCodigo] = useState<string | null>(null);
   const [form, setForm] = useState<ProductoInput>(FORM_VACIO);
   const [errorFormulario, setErrorFormulario] = useState<string | null>(null);
+  const [mostrarInactivos, setMostrarInactivos] = useState(false);
 
-  async function cargar(q?: string) {
+  async function cargar(q?: string, incluirInactivos = mostrarInactivos) {
     setCargando(true);
     setError(null);
     try {
-      setProductos(await productosApi.buscar(q));
+      setProductos(await productosApi.buscar(q, esAdmin && incluirInactivos));
     } catch (err) {
       setError(extraerMensajeError(err, "No se pudieron cargar los productos"));
     } finally {
@@ -35,9 +39,9 @@ export function ProductosPage() {
   }
 
   useEffect(() => {
-    cargar();
+    cargar(busqueda, mostrarInactivos);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [mostrarInactivos]);
 
   function abrirNuevo() {
     setEditandoCodigo(null);
@@ -89,7 +93,7 @@ export function ProductosPage() {
     <div>
       <div className="page-header">
         <h1>Catálogo de productos</h1>
-        <button onClick={abrirNuevo}>+ Nuevo producto</button>
+        {esAdmin && <button onClick={abrirNuevo}>+ Nuevo producto</button>}
       </div>
 
       <div className="toolbar">
@@ -102,6 +106,16 @@ export function ProductosPage() {
         <button className="secondary" onClick={() => cargar(busqueda)}>
           Buscar
         </button>
+        {esAdmin && (
+          <label className="checkbox-inline">
+            <input
+              type="checkbox"
+              checked={mostrarInactivos}
+              onChange={(e) => setMostrarInactivos(e.target.checked)}
+            />
+            Mostrar inactivos
+          </label>
+        )}
       </div>
 
       {error && <p className="error-text">{error}</p>}
@@ -133,13 +147,19 @@ export function ProductosPage() {
                 </span>
               </td>
               <td className="actions">
-                <button className="link-button" onClick={() => abrirEdicion(p)}>
-                  Editar
-                </button>
-                {p.activo && (
-                  <button className="link-button danger" onClick={() => onDesactivar(p)}>
-                    Desactivar
-                  </button>
+                {esAdmin ? (
+                  <>
+                    <button className="link-button" onClick={() => abrirEdicion(p)}>
+                      Editar
+                    </button>
+                    {p.activo && (
+                      <button className="link-button danger" onClick={() => onDesactivar(p)}>
+                        Desactivar
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <span className="hint-text">Solo lectura</span>
                 )}
               </td>
             </tr>
