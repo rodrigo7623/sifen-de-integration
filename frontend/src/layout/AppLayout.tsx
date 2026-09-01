@@ -10,17 +10,27 @@ export function AppLayout() {
         <div className="sidebar-brand">SIFEN Manager</div>
         <div className="sidebar-subbrand">Tottal Store</div>
         <nav>
+          <NavLink to="/facturas" className={({ isActive }) => (isActive ? "active" : "")}>
+            Facturas
+          </NavLink>
           <NavLink to="/productos" className={({ isActive }) => (isActive ? "active" : "")}>
             Productos
           </NavLink>
           <NavLink to="/clientes" className={({ isActive }) => (isActive ? "active" : "")}>
             Clientes
           </NavLink>
+          {usuario?.rol === "ADMIN" && (
+            <NavLink to="/usuarios" className={({ isActive }) => (isActive ? "active" : "")}>
+              Usuarios
+            </NavLink>
+          )}
         </nav>
       </aside>
       <div className="main-area">
         <header className="topbar">
-          <span>{usuario?.nombre}</span>
+          <span>
+            {usuario?.nombre} <span className="hint-text">({usuario?.rol})</span>
+          </span>
           <button className="link-button" onClick={logout}>
             Cerrar sesión
           </button>

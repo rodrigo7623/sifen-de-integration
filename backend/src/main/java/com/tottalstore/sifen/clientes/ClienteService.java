@@ -18,11 +18,13 @@ public class ClienteService {
         this.validadorRuc = validadorRuc;
     }
 
-    public List<Cliente> buscar(String q) {
+    public List<Cliente> buscar(String q, boolean incluirInactivos) {
         if (q == null || q.isBlank()) {
-            return clienteRepository.findByActivoTrueOrderByRazonSocialAsc();
+            return incluirInactivos
+                    ? clienteRepository.findAllByOrderByRazonSocialAsc()
+                    : clienteRepository.findByActivoTrueOrderByRazonSocialAsc();
         }
-        return clienteRepository.buscar(q.trim());
+        return incluirInactivos ? clienteRepository.buscarTodos(q.trim()) : clienteRepository.buscar(q.trim());
     }
 
     public Cliente obtener(String ruc) {

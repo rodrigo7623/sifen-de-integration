@@ -1,0 +1,293 @@
+{
+  "info": {
+    "name": "SIFEN Manager - Tottal Store",
+    "description": "Coleccion para probar el backend (Release 1): auth, catalogo, clientes y facturacion manual. Correr primero 'Login' (guarda el token automaticamente); el resto de las carpetas usan Bearer Auth heredado de la coleccion.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/api" },
+    { "key": "token", "value": "" },
+    { "key": "clienteRuc", "value": "80012345-0" },
+    { "key": "productoCodigo", "value": "TLD-220V" },
+    { "key": "facturaId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('token', data.token);",
+                  "pm.test('login ok, token guardado', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@tottalstore.com\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Productos",
+      "item": [
+        {
+          "name": "Listar / buscar",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/productos?q=",
+              "host": ["{{baseUrl}}"],
+              "path": ["productos"],
+              "query": [{ "key": "q", "value": "" }]
+            }
+          }
+        },
+        {
+          "name": "Obtener por codigo",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/productos/{{productoCodigo}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["productos", "{{productoCodigo}}"]
+            }
+          }
+        },
+        {
+          "name": "Crear",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"{{productoCodigo}}\",\n  \"descripcion\": \"Taladro percutor 220V 800W\",\n  \"unidadMedida\": \"UN\",\n  \"precioBase\": 350000,\n  \"tasaIva\": \"DIEZ\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/productos", "host": ["{{baseUrl}}"], "path": ["productos"] }
+          }
+        },
+        {
+          "name": "Editar",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"{{productoCodigo}}\",\n  \"descripcion\": \"Taladro percutor 220V 800W (actualizado)\",\n  \"unidadMedida\": \"UN\",\n  \"precioBase\": 365000,\n  \"tasaIva\": \"DIEZ\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/productos/{{productoCodigo}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["productos", "{{productoCodigo}}"]
+            }
+          }
+        },
+        {
+          "name": "Desactivar",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/productos/{{productoCodigo}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["productos", "{{productoCodigo}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Clientes",
+      "item": [
+        {
+          "name": "Listar / buscar",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/clientes?q=",
+              "host": ["{{baseUrl}}"],
+              "path": ["clientes"],
+              "query": [{ "key": "q", "value": "" }]
+            }
+          }
+        },
+        {
+          "name": "Obtener por RUC",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/clientes/{{clienteRuc}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["clientes", "{{clienteRuc}}"]
+            }
+          }
+        },
+        {
+          "name": "Validar RUC",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/clientes/validar-ruc?ruc={{clienteRuc}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["clientes", "validar-ruc"],
+              "query": [{ "key": "ruc", "value": "{{clienteRuc}}" }]
+            }
+          }
+        },
+        {
+          "name": "Historial de facturas del cliente",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/clientes/{{clienteRuc}}/facturas",
+              "host": ["{{baseUrl}}"],
+              "path": ["clientes", "{{clienteRuc}}", "facturas"]
+            }
+          }
+        },
+        {
+          "name": "Crear",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ruc\": \"{{clienteRuc}}\",\n  \"razonSocial\": \"Distribuidora Sur SA\",\n  \"direccion\": \"Av. Mcal. Lopez 1234\",\n  \"email\": \"admin@distribuidorasur.com.py\",\n  \"condicionIva\": \"RESPONSABLE_IVA\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/clientes", "host": ["{{baseUrl}}"], "path": ["clientes"] }
+          }
+        },
+        {
+          "name": "Editar",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ruc\": \"{{clienteRuc}}\",\n  \"razonSocial\": \"Distribuidora Sur SA (actualizada)\",\n  \"direccion\": \"Av. Mcal. Lopez 1234\",\n  \"email\": \"admin@distribuidorasur.com.py\",\n  \"condicionIva\": \"RESPONSABLE_IVA\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/clientes/{{clienteRuc}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["clientes", "{{clienteRuc}}"]
+            }
+          }
+        },
+        {
+          "name": "Desactivar",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/clientes/{{clienteRuc}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["clientes", "{{clienteRuc}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Facturas",
+      "item": [
+        {
+          "name": "Listar (con filtro opcional de estado)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/facturas?estado=",
+              "host": ["{{baseUrl}}"],
+              "path": ["facturas"],
+              "query": [
+                {
+                  "key": "estado",
+                  "value": "",
+                  "description": "BORRADOR, EN_VALIDACION, FIRMADO, ENVIADO_SIFEN, APROBADO, RECHAZADO, EN_PROCESO, EN_CORRECCION, ANULADO"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Obtener por id",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/facturas/{{facturaId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["facturas", "{{facturaId}}"]
+            }
+          }
+        },
+        {
+          "name": "Crear borrador",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('facturaId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clienteRuc\": \"{{clienteRuc}}\",\n  \"condicionPago\": \"CONTADO\",\n  \"items\": [\n    {\n      \"productoCodigo\": \"{{productoCodigo}}\",\n      \"descripcion\": \"Taladro percutor 220V\",\n      \"cantidad\": 2,\n      \"precioUnitario\": 350000,\n      \"tasaIva\": \"DIEZ\"\n    },\n    {\n      \"descripcion\": \"Estante metalico 5 niveles\",\n      \"cantidad\": 1,\n      \"precioUnitario\": 550000,\n      \"tasaIva\": \"DIEZ\"\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/facturas", "host": ["{{baseUrl}}"], "path": ["facturas"] }
+          }
+        },
+        {
+          "name": "Editar borrador",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clienteRuc\": \"{{clienteRuc}}\",\n  \"condicionPago\": \"CREDITO\",\n  \"plazoDias\": 30,\n  \"cantidadCuotas\": 3,\n  \"items\": [\n    {\n      \"productoCodigo\": \"{{productoCodigo}}\",\n      \"descripcion\": \"Taladro percutor 220V\",\n      \"cantidad\": 1,\n      \"precioUnitario\": 350000,\n      \"tasaIva\": \"DIEZ\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/facturas/{{facturaId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["facturas", "{{facturaId}}"]
+            }
+          }
+        },
+        {
+          "name": "Confirmar (firmar + enviar SIFEN)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/facturas/{{facturaId}}/confirmar",
+              "host": ["{{baseUrl}}"],
+              "path": ["facturas", "{{facturaId}}", "confirmar"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

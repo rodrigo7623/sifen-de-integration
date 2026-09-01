@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -37,6 +38,14 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> handleBadCredentials(BadCredentialsException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(ApiError.of(401, "INVALID_CREDENTIALS", "Usuario o contraseña incorrectos"));
+    }
+
+    @ExceptionHandler(DisabledException.class)
+    public ResponseEntity<ApiError> handleDisabled(DisabledException ex) {
+        // Lanzada por Spring Security en el chequeo previo al login cuando Usuario.activo = false
+        // (ver UsuarioDetailsServiceImpl.disabled(...)). Sin este handler cae en el genérico de 500.
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ApiError.of(401, "ACCOUNT_DISABLED", "La cuenta está desactivada"));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
