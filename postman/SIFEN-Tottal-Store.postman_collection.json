@@ -1,19 +1,72 @@
 {
   "info": {
     "name": "SIFEN Manager - Tottal Store",
-    "description": "Coleccion para probar el backend (Release 1): auth, catalogo, clientes y facturacion manual. Correr primero 'Login' (guarda el token automaticamente); el resto de las carpetas usan Bearer Auth heredado de la coleccion.",
+    "description": "Coleccion para probar el backend (Release 1): auth, catalogo, clientes, facturacion manual y ABM de usuarios. Correr primero 'Login' (guarda el token automaticamente); el resto de las carpetas usan Bearer Auth heredado de la coleccion. Cada corrida genera codigo/RUC/email unicos (runId), por lo que la coleccion completa se puede correr repetidas veces sin conflictos.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
     "type": "bearer",
-    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:8080/api" },
-    { "key": "token", "value": "" },
-    { "key": "clienteRuc", "value": "80012345-0" },
-    { "key": "productoCodigo", "value": "TLD-220V" },
-    { "key": "facturaId", "value": "" }
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080/api"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "runId",
+      "value": ""
+    },
+    {
+      "key": "clienteRuc",
+      "value": "80012345-0"
+    },
+    {
+      "key": "productoCodigo",
+      "value": "TLD-220V"
+    },
+    {
+      "key": "facturaId",
+      "value": ""
+    },
+    {
+      "key": "usuarioId",
+      "value": ""
+    },
+    {
+      "key": "clienteRucFactura",
+      "value": ""
+    },
+    {
+      "key": "productoCodigoFactura",
+      "value": ""
+    },
+    {
+      "key": "facturaIdRechazo",
+      "value": ""
+    },
+    {
+      "key": "establecimientoIdFactura",
+      "value": ""
+    },
+    {
+      "key": "puntoExpedicionIdFactura",
+      "value": ""
+    },
+    {
+      "key": "establecimientoIdNuevo",
+      "value": ""
+    }
   ],
   "item": [
     {
@@ -27,8 +80,8 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const data = pm.response.json();",
-                  "pm.collectionVariables.set('token', data.token);",
+                  "const loginData = pm.response.json();",
+                  "pm.collectionVariables.set('token', loginData.token);",
                   "pm.test('login ok, token guardado', () => pm.response.to.have.status(200));"
                 ]
               }
@@ -36,12 +89,26 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"admin@tottalstore.com\",\n  \"password\": \"admin123\"\n}"
             },
-            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
           }
         }
       ]
@@ -55,11 +122,32 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/productos?q=",
-              "host": ["{{baseUrl}}"],
-              "path": ["productos"],
-              "query": [{ "key": "q", "value": "" }]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "productos"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": ""
+                }
+              ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('respuesta es un arreglo', () => Array.isArray(pm.response.json()));"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Obtener por codigo",
@@ -67,49 +155,129 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/productos/{{productoCodigo}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["productos", "{{productoCodigo}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "productos",
+                "{{productoCodigo}}"
+              ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Crear",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"codigo\": \"{{productoCodigo}}\",\n  \"descripcion\": \"Taladro percutor 220V 800W\",\n  \"unidadMedida\": \"UN\",\n  \"precioBase\": 350000,\n  \"tasaIva\": \"DIEZ\"\n}"
+              "raw": "{\n  \"codigo\": \"{{productoCodigo}}-{{runId}}\",\n  \"descripcion\": \"Taladro percutor 220V 800W\",\n  \"unidadMedida\": \"UN\",\n  \"precioBase\": 350000,\n  \"tasaIva\": \"DIEZ\"\n}"
             },
-            "url": { "raw": "{{baseUrl}}/productos", "host": ["{{baseUrl}}"], "path": ["productos"] }
-          }
+            "url": {
+              "raw": "{{baseUrl}}/productos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "productos"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('producto creado guarda codigoCreado', () => {",
+                  "  pm.collectionVariables.set('productoCodigoCreado', pm.response.json().codigo);",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Editar",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"codigo\": \"{{productoCodigo}}\",\n  \"descripcion\": \"Taladro percutor 220V 800W (actualizado)\",\n  \"unidadMedida\": \"UN\",\n  \"precioBase\": 365000,\n  \"tasaIva\": \"DIEZ\"\n}"
+              "raw": "{\n  \"codigo\": \"{{productoCodigoCreado}}\",\n  \"descripcion\": \"Taladro percutor 220V 800W (actualizado)\",\n  \"unidadMedida\": \"UN\",\n  \"precioBase\": 365000,\n  \"tasaIva\": \"DIEZ\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/productos/{{productoCodigo}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["productos", "{{productoCodigo}}"]
+              "raw": "{{baseUrl}}/productos/{{productoCodigoCreado}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "productos",
+                "{{productoCodigoCreado}}"
+              ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Desactivar",
           "request": {
             "method": "DELETE",
             "url": {
-              "raw": "{{baseUrl}}/productos/{{productoCodigo}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["productos", "{{productoCodigo}}"]
+              "raw": "{{baseUrl}}/productos/{{productoCodigoCreado}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "productos",
+                "{{productoCodigoCreado}}"
+              ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -122,11 +290,32 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/clientes?q=",
-              "host": ["{{baseUrl}}"],
-              "path": ["clientes"],
-              "query": [{ "key": "q", "value": "" }]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clientes"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": ""
+                }
+              ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('respuesta es un arreglo', () => Array.isArray(pm.response.json()));"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Obtener por RUC",
@@ -134,10 +323,26 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/clientes/{{clienteRuc}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["clientes", "{{clienteRuc}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clientes",
+                "{{clienteRuc}}"
+              ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Validar RUC",
@@ -145,11 +350,32 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/clientes/validar-ruc?ruc={{clienteRuc}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["clientes", "validar-ruc"],
-              "query": [{ "key": "ruc", "value": "{{clienteRuc}}" }]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clientes",
+                "validar-ruc"
+              ],
+              "query": [
+                {
+                  "key": "ruc",
+                  "value": "{{clienteRuc}}"
+                }
+              ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Historial de facturas del cliente",
@@ -157,49 +383,130 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/clientes/{{clienteRuc}}/facturas",
-              "host": ["{{baseUrl}}"],
-              "path": ["clientes", "{{clienteRuc}}", "facturas"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clientes",
+                "{{clienteRuc}}",
+                "facturas"
+              ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Crear",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"ruc\": \"{{clienteRuc}}\",\n  \"razonSocial\": \"Distribuidora Sur SA\",\n  \"direccion\": \"Av. Mcal. Lopez 1234\",\n  \"email\": \"admin@distribuidorasur.com.py\",\n  \"condicionIva\": \"RESPONSABLE_IVA\"\n}"
+              "raw": "{\n  \"ruc\": \"{{clienteRucGenerado}}\",\n  \"razonSocial\": \"Distribuidora Sur SA\",\n  \"direccion\": \"Av. Mcal. Lopez 1234\",\n  \"email\": \"cliente{{runId}}@distribuidorasur.com.py\",\n  \"condicionIva\": \"RESPONSABLE_IVA\"\n}"
             },
-            "url": { "raw": "{{baseUrl}}/clientes", "host": ["{{baseUrl}}"], "path": ["clientes"] }
-          }
+            "url": {
+              "raw": "{{baseUrl}}/clientes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clientes"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('cliente creado guarda ruc', () => {",
+                  "  pm.collectionVariables.set('clienteRucCreado', pm.response.json().ruc);",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Editar",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"ruc\": \"{{clienteRuc}}\",\n  \"razonSocial\": \"Distribuidora Sur SA (actualizada)\",\n  \"direccion\": \"Av. Mcal. Lopez 1234\",\n  \"email\": \"admin@distribuidorasur.com.py\",\n  \"condicionIva\": \"RESPONSABLE_IVA\"\n}"
+              "raw": "{\n  \"ruc\": \"{{clienteRucCreado}}\",\n  \"razonSocial\": \"Distribuidora Sur SA (actualizada)\",\n  \"direccion\": \"Av. Mcal. Lopez 1234\",\n  \"email\": \"admin@distribuidorasur.com.py\",\n  \"condicionIva\": \"RESPONSABLE_IVA\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/clientes/{{clienteRuc}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["clientes", "{{clienteRuc}}"]
+              "raw": "{{baseUrl}}/clientes/{{clienteRucCreado}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clientes",
+                "{{clienteRucCreado}}"
+              ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Desactivar",
           "request": {
             "method": "DELETE",
             "url": {
-              "raw": "{{baseUrl}}/clientes/{{clienteRuc}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["clientes", "{{clienteRuc}}"]
+              "raw": "{{baseUrl}}/clientes/{{clienteRucCreado}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clientes",
+                "{{clienteRucCreado}}"
+              ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -207,31 +514,113 @@
       "name": "Facturas",
       "item": [
         {
-          "name": "Listar (con filtro opcional de estado)",
+          "name": "Setup: obtener establecimiento para factura",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const establecimientos = pm.response.json();",
+                  "pm.test('hay al menos un establecimiento activo con punto de expedicion', () => {",
+                  "  pm.expect(establecimientos.length).to.be.greaterThan(0);",
+                  "  pm.expect(establecimientos[0].puntosExpedicion.length).to.be.greaterThan(0);",
+                  "});",
+                  "pm.collectionVariables.set('establecimientoIdFactura', establecimientos[0].id);",
+                  "pm.collectionVariables.set('puntoExpedicionIdFactura', establecimientos[0].puntosExpedicion[0].id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{baseUrl}}/facturas?estado=",
-              "host": ["{{baseUrl}}"],
-              "path": ["facturas"],
-              "query": [
-                {
-                  "key": "estado",
-                  "value": "",
-                  "description": "BORRADOR, EN_VALIDACION, FIRMADO, ENVIADO_SIFEN, APROBADO, RECHAZADO, EN_PROCESO, EN_CORRECCION, ANULADO"
-                }
+              "raw": "{{baseUrl}}/establecimientos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "establecimientos"
               ]
             }
           }
         },
         {
-          "name": "Obtener por id",
+          "name": "Setup: crear cliente para factura",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('cliente para factura creado', () => {",
+                  "  pm.collectionVariables.set('clienteRucFactura', pm.response.json().ruc);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
-            "method": "GET",
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ruc\": \"{{clienteRucGeneradoFactura}}\",\n  \"razonSocial\": \"Cliente Factura Test\",\n  \"direccion\": \"Av. Mcal. Lopez 1234\",\n  \"email\": \"clientefactura{{runId}}@distribuidorasur.com.py\",\n  \"condicionIva\": \"RESPONSABLE_IVA\"\n}"
+            },
             "url": {
-              "raw": "{{baseUrl}}/facturas/{{facturaId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["facturas", "{{facturaId}}"]
+              "raw": "{{baseUrl}}/clientes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clientes"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Setup: crear producto para factura",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('producto para factura creado', () => {",
+                  "  pm.collectionVariables.set('productoCodigoFactura', pm.response.json().codigo);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"{{productoCodigo}}-F{{runId}}\",\n  \"descripcion\": \"Taladro percutor 220V 800W\",\n  \"unidadMedida\": \"UN\",\n  \"precioBase\": 350000,\n  \"tasaIva\": \"DIEZ\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/productos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "productos"
+              ]
             }
           }
         },
@@ -243,38 +632,101 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
                   "if (pm.response.code === 201) {",
                   "  pm.collectionVariables.set('facturaId', pm.response.json().id);",
-                  "}"
+                  "}",
+                  "pm.test('factura en estado BORRADOR', () => pm.expect(pm.response.json().estadoDte).to.eql('BORRADOR'));"
                 ]
               }
             }
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"clienteRuc\": \"{{clienteRuc}}\",\n  \"condicionPago\": \"CONTADO\",\n  \"items\": [\n    {\n      \"productoCodigo\": \"{{productoCodigo}}\",\n      \"descripcion\": \"Taladro percutor 220V\",\n      \"cantidad\": 2,\n      \"precioUnitario\": 350000,\n      \"tasaIva\": \"DIEZ\"\n    },\n    {\n      \"descripcion\": \"Estante metalico 5 niveles\",\n      \"cantidad\": 1,\n      \"precioUnitario\": 550000,\n      \"tasaIva\": \"DIEZ\"\n    }\n  ]\n}"
+              "raw": "{\n  \"clienteRuc\": \"{{clienteRucFactura}}\",\n  \"establecimientoId\": \"{{establecimientoIdFactura}}\",\n  \"puntoExpedicionId\": \"{{puntoExpedicionIdFactura}}\",\n  \"condicionPago\": \"CONTADO\",\n  \"items\": [\n    {\n      \"productoCodigo\": \"{{productoCodigoFactura}}\",\n      \"descripcion\": \"Taladro percutor 220V\",\n      \"cantidad\": 2,\n      \"precioUnitario\": 350000,\n      \"tasaIva\": \"DIEZ\"\n    },\n    {\n      \"descripcion\": \"Estante metalico 5 niveles\",\n      \"cantidad\": 1,\n      \"precioUnitario\": 550000,\n      \"tasaIva\": \"DIEZ\"\n    }\n  ]\n}"
             },
-            "url": { "raw": "{{baseUrl}}/facturas", "host": ["{{baseUrl}}"], "path": ["facturas"] }
+            "url": {
+              "raw": "{{baseUrl}}/facturas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "facturas"
+              ]
+            }
           }
+        },
+        {
+          "name": "Obtener por id",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/facturas/{{facturaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "facturas",
+                "{{facturaId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Editar borrador",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"clienteRuc\": \"{{clienteRuc}}\",\n  \"condicionPago\": \"CREDITO\",\n  \"plazoDias\": 30,\n  \"cantidadCuotas\": 3,\n  \"items\": [\n    {\n      \"productoCodigo\": \"{{productoCodigo}}\",\n      \"descripcion\": \"Taladro percutor 220V\",\n      \"cantidad\": 1,\n      \"precioUnitario\": 350000,\n      \"tasaIva\": \"DIEZ\"\n    }\n  ]\n}"
+              "raw": "{\n  \"clienteRuc\": \"{{clienteRucFactura}}\",\n  \"establecimientoId\": \"{{establecimientoIdFactura}}\",\n  \"puntoExpedicionId\": \"{{puntoExpedicionIdFactura}}\",\n  \"condicionPago\": \"CREDITO\",\n  \"plazoDias\": 30,\n  \"cantidadCuotas\": 3,\n  \"items\": [\n    {\n      \"productoCodigo\": \"{{productoCodigoFactura}}\",\n      \"descripcion\": \"Taladro percutor 220V\",\n      \"cantidad\": 1,\n      \"precioUnitario\": 350000,\n      \"tasaIva\": \"DIEZ\"\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/facturas/{{facturaId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["facturas", "{{facturaId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "facturas",
+                "{{facturaId}}"
+              ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Confirmar (firmar + enviar SIFEN)",
@@ -282,12 +734,698 @@
             "method": "POST",
             "url": {
               "raw": "{{baseUrl}}/facturas/{{facturaId}}/confirmar",
-              "host": ["{{baseUrl}}"],
-              "path": ["facturas", "{{facturaId}}", "confirmar"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "facturas",
+                "{{facturaId}}",
+                "confirmar"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test(\"la factura queda APROBADA o RECHAZADA (stub SIFEN)\", () => {",
+                  "  pm.expect(['APROBADO','RECHAZADO']).to.include(pm.response.json().estadoDte);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Descargar PDF",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('content-type es PDF', () => pm.response.headers.get('Content-Type').includes('application/pdf'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/facturas/{{facturaId}}/pdf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "facturas",
+                "{{facturaId}}",
+                "pdf"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Descargar XML",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('el XML contiene el DTE', () => pm.response.text().includes('<DTE>'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/facturas/{{facturaId}}/xml",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "facturas",
+                "{{facturaId}}",
+                "xml"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Listar (con filtro opcional de estado)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/facturas?estado=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "facturas"
+              ],
+              "query": [
+                {
+                  "key": "estado",
+                  "value": "",
+                  "description": "BORRADOR, EN_VALIDACION, FIRMADO, ENVIADO_SIFEN, APROBADO, RECHAZADO, EN_PROCESO, EN_CORRECCION, ANULADO"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('respuesta es un arreglo', () => Array.isArray(pm.response.json()));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Gestion de rechazados: crear borrador con item RECHAZAR",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('factura en estado BORRADOR', () => pm.expect(pm.response.json().estadoDte).to.eql('BORRADOR'));",
+                  "pm.collectionVariables.set('facturaIdRechazo', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clienteRuc\": \"{{clienteRucFactura}}\",\n  \"establecimientoId\": \"{{establecimientoIdFactura}}\",\n  \"puntoExpedicionId\": \"{{puntoExpedicionIdFactura}}\",\n  \"condicionPago\": \"CONTADO\",\n  \"items\": [\n    {\n      \"descripcion\": \"Item de prueba RECHAZAR\",\n      \"cantidad\": 1,\n      \"precioUnitario\": 100000,\n      \"tasaIva\": \"DIEZ\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/facturas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "facturas"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Gestion de rechazados: confirmar (debe rechazar)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('la factura queda RECHAZADA', () => pm.expect(pm.response.json().estadoDte).to.eql('RECHAZADO'));",
+                  "pm.test('el motivo de rechazo esta presente', () => pm.expect(pm.response.json().motivoRechazo).to.not.be.null);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/facturas/{{facturaIdRechazo}}/confirmar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "facturas",
+                "{{facturaIdRechazo}}",
+                "confirmar"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Gestion de rechazados: reabrir",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('vuelve a BORRADOR', () => pm.expect(pm.response.json().estadoDte).to.eql('BORRADOR'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/facturas/{{facturaIdRechazo}}/reabrir",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "facturas",
+                "{{facturaIdRechazo}}",
+                "reabrir"
+              ]
             }
           }
         }
       ]
+    },
+    {
+      "name": "Usuarios",
+      "item": [
+        {
+          "name": "Listar / buscar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('respuesta es un arreglo', () => Array.isArray(pm.response.json()));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/usuarios?q=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Crear",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('usuario creado guarda id', () => {",
+                  "  pm.collectionVariables.set('usuarioId', pm.response.json().id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Operario de Prueba\",\n  \"email\": \"operario{{runId}}@tottalstore.com\",\n  \"password\": \"clave123\",\n  \"rol\": \"OPERARIO\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/usuarios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Editar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Operario de Prueba (editado)\",\n  \"rol\": \"OPERARIO\",\n  \"password\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/usuarios/{{usuarioId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios",
+                "{{usuarioId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Desactivar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/usuarios/{{usuarioId}}/desactivar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios",
+                "{{usuarioId}}",
+                "desactivar"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Activar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/usuarios/{{usuarioId}}/activar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios",
+                "{{usuarioId}}",
+                "activar"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Establecimientos",
+      "item": [
+        {
+          "name": "Listar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('respuesta es un arreglo', () => Array.isArray(pm.response.json()));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/establecimientos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "establecimientos"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Crear",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const runId = pm.collectionVariables.get('runId') || Date.now().toString().slice(-6);",
+                  "pm.collectionVariables.set('codigoEstablecimientoNuevo', runId.slice(-3));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('establecimientoIdNuevo', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"{{codigoEstablecimientoNuevo}}\",\n  \"denominacion\": \"Sucursal Newman {{runId}}\",\n  \"telefono\": \"021999999\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/establecimientos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "establecimientos"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Agregar punto de expedición",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('el establecimiento tiene el punto nuevo', () => pm.expect(pm.response.json().puntosExpedicion.length).to.be.greaterThan(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"001\",\n  \"descripcion\": \"Caja unica\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/establecimientos/{{establecimientoIdNuevo}}/puntos-expedicion",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "establecimientos",
+                "{{establecimientoIdNuevo}}",
+                "puntos-expedicion"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Desactivar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/establecimientos/{{establecimientoIdNuevo}}/desactivar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "establecimientos",
+                "{{establecimientoIdNuevo}}",
+                "desactivar"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard, Auditoría y Configuración",
+      "item": [
+        {
+          "name": "Dashboard — Resumen",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('trae facturasPorEstado', () => pm.response.json().facturasPorEstado !== undefined);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/resumen",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dashboard",
+                "resumen"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Auditoría — Listar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('content es un arreglo', () => Array.isArray(pm.response.json().content));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/auditoria?page=0&size=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auditoria"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Configuración de emisor — Obtener",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/configuracion/emisor",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "configuracion",
+                "emisor"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Configuración de emisor — Actualizar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('se guardo la razon social', () => pm.response.json().razonSocial === 'Tottal Store');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"razonSocial\": \"Tottal Store\",\n  \"rucBase\": \"4309652\",\n  \"dvRuc\": 2,\n  \"tipoContribuyente\": 1,\n  \"establecimiento\": \"001\",\n  \"puntoExpedicion\": \"001\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/configuracion/emisor",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "configuracion",
+                "emisor"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "function calcularDv(base) {",
+          "  let total = 0, peso = 2;",
+          "  for (let i = base.length - 1; i >= 0; i--) {",
+          "    total += parseInt(base[i], 10) * peso;",
+          "    peso = peso === 11 ? 2 : peso + 1;",
+          "  }",
+          "  const resto = total % 11;",
+          "  return resto > 1 ? 11 - resto : 0;",
+          "}",
+          "if (!pm.collectionVariables.get('runId')) {",
+          "  const runId = Date.now().toString().slice(-6);",
+          "  pm.collectionVariables.set('runId', runId);",
+          "  pm.collectionVariables.set('clienteRucGenerado', `${runId}-${calcularDv(runId)}`);",
+          "  const runIdFactura = runId.split('').reverse().join('');",
+          "  pm.collectionVariables.set('clienteRucGeneradoFactura', `${runIdFactura}-${calcularDv(runIdFactura)}`);",
+          "}"
+        ]
+      }
     }
   ]
 }

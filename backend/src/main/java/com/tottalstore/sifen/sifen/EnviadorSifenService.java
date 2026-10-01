@@ -1,13 +1,14 @@
 package com.tottalstore.sifen.sifen;
 
+import java.util.UUID;
+
 /**
  * Punto de extensión para el envío del DTE firmado al SIFEN (RF-03, CU-04).
  *
- * <p>La implementación real debe comunicarse por SOAP/REST con el webservice de la SET (ambiente
- * de homologación en Release 1 y 2, producción en Release 3). Mientras no se cuente con acceso a
- * ese ambiente, se usa {@link EnviadorSifenStub}.
+ * <p>Implementación real: {@link EnviadorSifenSoapService} (cliente SOAP con TLS mutuo, activo con
+ * {@code sifen.envio.modo=real}). Implementación por defecto: {@link EnviadorSifenStub}.
  */
 public interface EnviadorSifenService {
 
-    RespuestaSifenResult enviar(String xmlFirmado, Ambiente ambiente);
+    RespuestaSifenResult enviar(UUID facturaId, String xmlFirmado, Ambiente ambiente);
 }

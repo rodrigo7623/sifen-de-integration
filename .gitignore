@@ -4,6 +4,8 @@ backend/target/
 *.jar
 !.mvn/wrapper/maven-wrapper.jar
 HELP.md
+backend/emails-simulados/
+backend/sifen-envios-historial.jsonl
 
 # Frontend (Node / Vite)
 frontend/node_modules/

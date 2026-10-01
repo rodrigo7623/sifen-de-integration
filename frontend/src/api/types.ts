@@ -91,11 +91,42 @@ export interface ItemFactura {
   subtotal: number;
 }
 
+export interface PuntoExpedicion {
+  id: string;
+  codigo: string;
+  descripcion: string | null;
+  activo: boolean;
+}
+
+export interface Establecimiento {
+  id: string;
+  codigo: string;
+  denominacion: string;
+  direccion: string | null;
+  numeroCasa: string | null;
+  departamentoCodigo: string | null;
+  departamentoDescripcion: string | null;
+  distritoCodigo: string | null;
+  distritoDescripcion: string | null;
+  ciudadCodigo: string | null;
+  ciudadDescripcion: string | null;
+  telefono: string | null;
+  email: string | null;
+  activo: boolean;
+  puntosExpedicion: PuntoExpedicion[];
+}
+
 export interface Factura {
   id: string;
   estadoDte: EstadoDte;
   clienteRuc: string;
   clienteRazonSocial: string;
+  establecimientoId: string;
+  establecimientoCodigo: string;
+  establecimientoDenominacion: string;
+  puntoExpedicionId: string;
+  puntoExpedicionCodigo: string;
+  puntoExpedicionDescripcion: string | null;
   condicionPago: CondicionPago;
   plazoDias: number | null;
   cantidadCuotas: number | null;
@@ -104,4 +135,61 @@ export interface Factura {
   totalGeneral: number;
   fechaEmision: string;
   items: ItemFactura[];
+  motivoRechazo: string | null;
+  emailEnviado: boolean;
+}
+
+export interface RechazoResumen {
+  facturaId: string;
+  clienteRazonSocial: string;
+  motivo: string | null;
+  fechaEmision: string;
+}
+
+export interface ResumenDashboard {
+  facturasPorEstado: Partial<Record<EstadoDte, number>>;
+  cantidadFacturasMes: number;
+  totalFacturadoMes: number;
+  ultimosRechazados: RechazoResumen[];
+}
+
+export interface AuditoriaEntrada {
+  id: string;
+  operacion: string;
+  fechaHora: string;
+  usuarioNombre: string | null;
+  facturaId: string | null;
+}
+
+export interface PaginaSpring<T> {
+  content: T[];
+  totalPages: number;
+  totalElements: number;
+  number: number;
+  size: number;
+}
+
+export interface ConfiguracionEmisor {
+  razonSocial: string | null;
+  nombreFantasia: string | null;
+  direccion: string | null;
+  numeroCasa: string | null;
+  complementoDireccion1: string | null;
+  complementoDireccion2: string | null;
+  departamentoCodigo: string | null;
+  departamentoDescripcion: string | null;
+  distritoCodigo: string | null;
+  distritoDescripcion: string | null;
+  ciudadCodigo: string | null;
+  ciudadDescripcion: string | null;
+  telefono: string | null;
+  email: string | null;
+  actividadEconomicaCodigo: string | null;
+  actividadEconomicaDescripcion: string | null;
+  rucBase: string | null;
+  dvRuc: number | null;
+  tipoContribuyente: number | null;
+  timbradoNumero: string | null;
+  timbradoFechaInicio: string | null;
+  timbradoFechaFin: string | null;
 }
