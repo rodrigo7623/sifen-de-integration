@@ -33,6 +33,10 @@ public class RespuestaSifen {
 
     private String cdc;
 
+    // Se persiste para poder ofrecer la descarga del XML enviado (RF-10) sin tener que reconstruirlo.
+    @Column(name = "xml_firmado")
+    private String xmlFirmado;
+
     @Column(name = "fecha_respuesta")
     private Instant fechaRespuesta = Instant.now();
 
