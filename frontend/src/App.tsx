@@ -3,7 +3,11 @@ import { AuthProvider } from "./auth/AuthContext";
 import { LoginPage } from "./auth/LoginPage";
 import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { AdminRoute } from "./auth/AdminRoute";
+import { AuditoriaPage } from "./features/auditoria/AuditoriaPage";
 import { ClientesPage } from "./features/clientes/ClientesPage";
+import { ConfiguracionPage } from "./features/configuracion/ConfiguracionPage";
+import { DashboardPage } from "./features/dashboard/DashboardPage";
+import { EstablecimientosPage } from "./features/establecimientos/EstablecimientosPage";
 import { ProductosPage } from "./features/catalogo/ProductosPage";
 import { FacturasPage } from "./features/facturas/FacturasPage";
 import { FacturaFormPage } from "./features/facturas/FacturaFormPage";
@@ -18,6 +22,7 @@ export function App() {
 
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
+            <Route path="/" element={<DashboardPage />} />
             <Route path="/facturas" element={<FacturasPage />} />
             <Route path="/facturas/nueva" element={<FacturaFormPage />} />
             <Route path="/facturas/:id" element={<FacturaFormPage />} />
@@ -25,8 +30,10 @@ export function App() {
             <Route path="/clientes" element={<ClientesPage />} />
             <Route element={<AdminRoute />}>
               <Route path="/usuarios" element={<UsuariosPage />} />
+              <Route path="/auditoria" element={<AuditoriaPage />} />
+              <Route path="/establecimientos" element={<EstablecimientosPage />} />
+              <Route path="/configuracion" element={<ConfiguracionPage />} />
             </Route>
-            <Route path="/" element={<Navigate to="/facturas" replace />} />
           </Route>
         </Route>
 

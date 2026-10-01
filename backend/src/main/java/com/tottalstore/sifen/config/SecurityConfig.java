@@ -61,6 +61,14 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health").permitAll()
                         // ABM de usuarios: solo ADMIN, para cualquier método.
                         .requestMatchers("/api/usuarios/**").hasRole("ADMIN")
+                        // Visor de auditoría: solo ADMIN (es información sensible de todos los usuarios).
+                        .requestMatchers("/api/auditoria/**").hasRole("ADMIN")
+                        // Configuración de emisor: lectura para ambos roles, edición solo ADMIN.
+                        .requestMatchers(HttpMethod.PUT, "/api/configuracion/**").hasRole("ADMIN")
+                        // Establecimientos y puntos de expedición: lectura para ambos roles (lo
+                        // necesita el formulario de factura), altas/bajas/ediciones solo ADMIN.
+                        .requestMatchers(HttpMethod.POST, "/api/establecimientos/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/establecimientos/**").hasRole("ADMIN")
                         // Mantenimiento de datos maestros (catálogo/clientes): solo ADMIN.
                         // Consultarlos y emitir/confirmar facturas queda abierto a ambos roles.
                         .requestMatchers(HttpMethod.POST, "/api/productos/**", "/api/clientes/**")

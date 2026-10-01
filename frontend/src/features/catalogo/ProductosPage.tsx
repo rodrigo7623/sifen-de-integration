@@ -1,7 +1,15 @@
+import { Plus } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { extraerMensajeError } from "../../api/client";
-import { useAuth } from "../../auth/AuthContext";
 import { TASA_IVA_LABEL, type Producto, type TasaIva } from "../../api/types";
+import { useAuth } from "../../auth/AuthContext";
+import { Badge } from "../../components/ui/Badge";
+import { Button } from "../../components/ui/Button";
+import { type Column, DataTable } from "../../components/ui/DataTable";
+import { FormField } from "../../components/ui/FormField";
+import { Modal } from "../../components/ui/Modal";
+import { useConfirm } from "../../components/ui/ConfirmProvider";
+import { useToast } from "../../components/ui/ToastProvider";
 import { productosApi, type ProductoInput } from "./api";
 
 const FORM_VACIO: ProductoInput = {
@@ -15,6 +23,8 @@ const FORM_VACIO: ProductoInput = {
 export function ProductosPage() {
   const { usuario } = useAuth();
   const esAdmin = usuario?.rol === "ADMIN";
+  const confirmar = useConfirm();
+  const { showToast } = useToast();
   const [productos, setProductos] = useState<Producto[]>([]);
   const [busqueda, setBusqueda] = useState("");
   const [cargando, setCargando] = useState(false);
@@ -73,6 +83,7 @@ export function ProductosPage() {
         await productosApi.crear(form);
       }
       setMostrarFormulario(false);
+      showToast(editandoCodigo ? "Producto actualizado" : "Producto creado", "success");
       await cargar(busqueda);
     } catch (err) {
       setErrorFormulario(extraerMensajeError(err, "No se pudo guardar el producto"));
@@ -80,36 +91,74 @@ export function ProductosPage() {
   }
 
   async function onDesactivar(producto: Producto) {
-    if (!confirm(`¿Desactivar el producto ${producto.codigo}?`)) return;
+    if (!(await confirmar(`¿Desactivar el producto ${producto.codigo}?`))) return;
     try {
       await productosApi.desactivar(producto.codigo);
+      showToast("Producto desactivado", "success");
       await cargar(busqueda);
     } catch (err) {
-      setError(extraerMensajeError(err, "No se pudo desactivar el producto"));
+      showToast(extraerMensajeError(err, "No se pudo desactivar el producto"), "error");
     }
   }
 
+  const columnas: Column<Producto>[] = [
+    { header: "Código", render: (p) => p.codigo },
+    { header: "Descripción", render: (p) => p.descripcion },
+    { header: "Unidad", render: (p) => p.unidadMedida },
+    { header: "Precio base", render: (p) => p.precioBase.toLocaleString("es-PY") },
+    { header: "Tasa IVA", render: (p) => TASA_IVA_LABEL[p.tasaIva] },
+    {
+      header: "Estado",
+      render: (p) => <Badge tone={p.activo ? "ok" : "off"}>{p.activo ? "Activo" : "Inactivo"}</Badge>,
+    },
+    {
+      header: "",
+      className: "whitespace-nowrap text-right",
+      render: (p) =>
+        esAdmin ? (
+          <>
+            <Button variant="link" onClick={() => abrirEdicion(p)}>
+              Editar
+            </Button>
+            {p.activo && (
+              <Button variant="link-danger" onClick={() => onDesactivar(p)}>
+                Desactivar
+              </Button>
+            )}
+          </>
+        ) : (
+          <span className="text-sm text-texto-suave">Solo lectura</span>
+        ),
+    },
+  ];
+
   return (
     <div>
-      <div className="page-header">
-        <h1>Catálogo de productos</h1>
-        {esAdmin && <button onClick={abrirNuevo}>+ Nuevo producto</button>}
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="m-0 text-xl font-semibold">Catálogo de productos</h1>
+        {esAdmin && (
+          <Button icon={<Plus size={16} />} onClick={abrirNuevo}>
+            Nuevo producto
+          </Button>
+        )}
       </div>
 
-      <div className="toolbar">
+      <div className="mb-4 flex max-w-xl flex-wrap items-center gap-2">
         <input
+          className="min-w-[220px] flex-1"
           placeholder="Buscar por código o descripción…"
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && cargar(busqueda)}
         />
-        <button className="secondary" onClick={() => cargar(busqueda)}>
+        <Button variant="secondary" onClick={() => cargar(busqueda)}>
           Buscar
-        </button>
+        </Button>
         {esAdmin && (
-          <label className="checkbox-inline">
+          <label className="flex items-center gap-1.5 whitespace-nowrap text-sm text-texto-suave">
             <input
               type="checkbox"
+              className="w-auto"
               checked={mostrarInactivos}
               onChange={(e) => setMostrarInactivos(e.target.checked)}
             />
@@ -118,121 +167,81 @@ export function ProductosPage() {
         )}
       </div>
 
-      {error && <p className="error-text">{error}</p>}
-      {cargando && <p>Cargando…</p>}
+      {error && <p className="mb-3 text-sm text-rojo">{error}</p>}
 
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>Código</th>
-            <th>Descripción</th>
-            <th>Unidad</th>
-            <th>Precio base</th>
-            <th>Tasa IVA</th>
-            <th>Estado</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {productos.map((p) => (
-            <tr key={p.codigo}>
-              <td>{p.codigo}</td>
-              <td>{p.descripcion}</td>
-              <td>{p.unidadMedida}</td>
-              <td>{p.precioBase.toLocaleString("es-PY")}</td>
-              <td>{TASA_IVA_LABEL[p.tasaIva]}</td>
-              <td>
-                <span className={`badge ${p.activo ? "badge-ok" : "badge-off"}`}>
-                  {p.activo ? "Activo" : "Inactivo"}
-                </span>
-              </td>
-              <td className="actions">
-                {esAdmin ? (
-                  <>
-                    <button className="link-button" onClick={() => abrirEdicion(p)}>
-                      Editar
-                    </button>
-                    {p.activo && (
-                      <button className="link-button danger" onClick={() => onDesactivar(p)}>
-                        Desactivar
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <span className="hint-text">Solo lectura</span>
-                )}
-              </td>
-            </tr>
-          ))}
-          {!cargando && productos.length === 0 && (
-            <tr>
-              <td colSpan={7} className="empty-state">
-                No hay productos para mostrar.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+      <DataTable
+        columns={columnas}
+        data={productos}
+        keyExtractor={(p) => p.codigo}
+        loading={cargando}
+        emptyMessage="No hay productos para mostrar."
+      />
 
       {mostrarFormulario && (
-        <div className="modal-backdrop" onClick={() => setMostrarFormulario(false)}>
-          <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={onSubmit}>
-            <h2>{editandoCodigo ? "Editar producto" : "Nuevo producto"}</h2>
+        <Modal
+          title={editandoCodigo ? "Editar producto" : "Nuevo producto"}
+          onClose={() => setMostrarFormulario(false)}
+        >
+          <form onSubmit={onSubmit}>
+            <FormField label="Código">
+              <input
+                value={form.codigo}
+                disabled={!!editandoCodigo}
+                onChange={(e) => setForm({ ...form, codigo: e.target.value })}
+                required
+              />
+            </FormField>
 
-            <label>Código</label>
-            <input
-              value={form.codigo}
-              disabled={!!editandoCodigo}
-              onChange={(e) => setForm({ ...form, codigo: e.target.value })}
-              required
-            />
+            <FormField label="Descripción">
+              <input
+                value={form.descripcion}
+                onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
+                required
+              />
+            </FormField>
 
-            <label>Descripción</label>
-            <input
-              value={form.descripcion}
-              onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
-              required
-            />
+            <FormField label="Unidad de medida">
+              <input
+                value={form.unidadMedida}
+                onChange={(e) => setForm({ ...form, unidadMedida: e.target.value })}
+                required
+              />
+            </FormField>
 
-            <label>Unidad de medida</label>
-            <input
-              value={form.unidadMedida}
-              onChange={(e) => setForm({ ...form, unidadMedida: e.target.value })}
-              required
-            />
+            <FormField label="Precio base (Gs.)">
+              <input
+                type="number"
+                min={0.01}
+                step="0.01"
+                value={form.precioBase}
+                onChange={(e) => setForm({ ...form, precioBase: Number(e.target.value) })}
+                required
+              />
+            </FormField>
 
-            <label>Precio base (Gs.)</label>
-            <input
-              type="number"
-              min={0.01}
-              step="0.01"
-              value={form.precioBase}
-              onChange={(e) => setForm({ ...form, precioBase: Number(e.target.value) })}
-              required
-            />
+            <FormField label="Tasa de IVA">
+              <select
+                value={form.tasaIva}
+                onChange={(e) => setForm({ ...form, tasaIva: e.target.value as TasaIva })}
+              >
+                {Object.entries(TASA_IVA_LABEL).map(([valor, etiqueta]) => (
+                  <option key={valor} value={valor}>
+                    {etiqueta}
+                  </option>
+                ))}
+              </select>
+            </FormField>
 
-            <label>Tasa de IVA</label>
-            <select
-              value={form.tasaIva}
-              onChange={(e) => setForm({ ...form, tasaIva: e.target.value as TasaIva })}
-            >
-              {Object.entries(TASA_IVA_LABEL).map(([valor, etiqueta]) => (
-                <option key={valor} value={valor}>
-                  {etiqueta}
-                </option>
-              ))}
-            </select>
+            {errorFormulario && <p className="mb-2 text-sm text-rojo">{errorFormulario}</p>}
 
-            {errorFormulario && <p className="error-text">{errorFormulario}</p>}
-
-            <div className="modal-actions">
-              <button type="button" className="secondary" onClick={() => setMostrarFormulario(false)}>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setMostrarFormulario(false)}>
                 Cancelar
-              </button>
-              <button type="submit">Guardar</button>
+              </Button>
+              <Button type="submit">Guardar</Button>
             </div>
           </form>
-        </div>
+        </Modal>
       )}
     </div>
   );
