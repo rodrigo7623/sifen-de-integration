@@ -35,11 +35,14 @@ public class LogAuditoria {
     @Column(name = "fecha_hora")
     private Instant fechaHora = Instant.now();
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    // EAGER a propósito: AuditoriaResponse.from() lee usuario/factura fuera de la transacción que
+    // cargó el log (open-in-view=false), igual que en FacturaElectronica.cliente -- un proxy LAZY
+    // explota con LazyInitializationException en ese punto.
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "usuario_id")
     private Usuario usuario;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "factura_id")
     private FacturaElectronica factura;
 }

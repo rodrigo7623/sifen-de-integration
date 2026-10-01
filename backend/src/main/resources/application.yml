@@ -28,6 +28,33 @@ sifen:
       expiration-minutes: 480
   cors:
     allowed-origins: ${SIFEN_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  email:
+    # Carpeta donde el stub de envío de correo (EnviadorEmailStub) escribe el PDF/XML/resumen
+    # simulados. TODO: reemplazar por credenciales SMTP reales cuando estén disponibles.
+    outbox-dir: ${SIFEN_EMAIL_OUTBOX_DIR:./emails-simulados}
+  firma:
+    # Certificado digital (.pfx/PKCS12) del contribuyente. Sin valor por defecto a propósito: son
+    # secretos, y solo hacen falta cuando sifen.envio.modo=real (SifenKeystoreConfig).
+    keystore-path: ${SIFEN_FIRMA_KEYSTORE_PATH:}
+    keystore-password: ${SIFEN_FIRMA_KEYSTORE_PASSWORD:}
+    key-alias: ${SIFEN_FIRMA_KEY_ALIAS:}
+  emisor:
+    # Datos del emisor para el CDC (EmisorConfig). Sin default para RUC/tipo de contribuyente (son
+    # datos reales del contribuyente); establecimiento/punto de expedición sí, como placeholder
+    # provisorio hasta contar con el timbrado electrónico definitivo (el SIFEN exige haber probado
+    # en homologación antes de poder solicitarlo).
+    ruc: ${SIFEN_EMISOR_RUC:}
+    tipo-contribuyente: ${SIFEN_EMISOR_TIPO_CONTRIBUYENTE:1}
+    establecimiento: ${SIFEN_EMISOR_ESTABLECIMIENTO:001}
+    punto-expedicion: ${SIFEN_EMISOR_PUNTO_EXPEDICION:001}
+  envio:
+    # "stub" (default): EnviadorSifenStub, sin red real. "real": EnviadorSifenSoapService, con TLS
+    # mutuo contra el SIFEN real (requiere sifen.firma.keystore-* configurado).
+    modo: ${SIFEN_ENVIO_MODO:stub}
+    timeout-segundos: ${SIFEN_ENVIO_TIMEOUT_SEGUNDOS:30}
+    # Historial append-only de cada intento real contra el SIFEN (aprobado, rechazado o con error de
+    # conexión) — para poder mostrar cómo fue avanzando la integración a lo largo del tiempo.
+    historial-path: ${SIFEN_ENVIO_HISTORIAL_PATH:./sifen-envios-historial.jsonl}
 
 logging:
   level:

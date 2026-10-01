@@ -2,6 +2,9 @@ package com.tottalstore.sifen.facturacion;
 
 import com.tottalstore.sifen.auth.Usuario;
 import com.tottalstore.sifen.clientes.Cliente;
+import com.tottalstore.sifen.establecimientos.Establecimiento;
+import com.tottalstore.sifen.establecimientos.PuntoExpedicion;
+import com.tottalstore.sifen.sifen.RespuestaSifen;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -14,6 +17,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -66,6 +70,9 @@ public class FacturaElectronica {
     @Column(name = "fecha_emision")
     private Instant fechaEmision = Instant.now();
 
+    @Column(name = "email_enviado")
+    private boolean emailEnviado = false;
+
     // EAGER a propósito: FacturaResponse.from() siempre necesita razón social del cliente al leer
     // una factura, y open-in-view=false hace que un proxy LAZY explote (LazyInitializationException)
     // fuera del método @Transactional que cargó la factura. Es un @ManyToOne, no un @OneToMany: no
@@ -78,6 +85,21 @@ public class FacturaElectronica {
     @JoinColumn(name = "usuario_id")
     private Usuario usuario;
 
+    // EAGER por el mismo motivo que "cliente": FacturaResponse.from() lee el establecimiento/punto
+    // de expedición fuera de la transacción que cargó la factura.
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "establecimiento_id")
+    private Establecimiento establecimiento;
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "punto_expedicion_id")
+    private PuntoExpedicion puntoExpedicion;
+
     @OneToMany(mappedBy = "factura", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<ItemFactura> items = new ArrayList<>();
+
+    // EAGER por el mismo motivo que "cliente": FacturaResponse.from() lee el motivo de rechazo y el
+    // XML firmado fuera de la transacción que cargó la factura; es un OneToOne, sin riesgo de N+1.
+    @OneToOne(mappedBy = "factura", fetch = FetchType.EAGER)
+    private RespuestaSifen respuestaSifen;
 }

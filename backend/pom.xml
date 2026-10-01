@@ -80,6 +80,13 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Generación del PDF de la factura (RF-10 / REP-06). Licencia Apache 2.0, sin costo. -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.3</version>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

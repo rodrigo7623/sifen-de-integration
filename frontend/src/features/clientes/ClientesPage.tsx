@@ -1,7 +1,15 @@
+import { Plus } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { extraerMensajeError } from "../../api/client";
-import { useAuth } from "../../auth/AuthContext";
 import { CONDICION_IVA_LABEL, type Cliente, type CondicionIva } from "../../api/types";
+import { useAuth } from "../../auth/AuthContext";
+import { Badge } from "../../components/ui/Badge";
+import { Button } from "../../components/ui/Button";
+import { useConfirm } from "../../components/ui/ConfirmProvider";
+import { type Column, DataTable } from "../../components/ui/DataTable";
+import { FormField } from "../../components/ui/FormField";
+import { Modal } from "../../components/ui/Modal";
+import { useToast } from "../../components/ui/ToastProvider";
 import { clientesApi, type ClienteInput } from "./api";
 
 const FORM_VACIO: ClienteInput = {
@@ -15,6 +23,8 @@ const FORM_VACIO: ClienteInput = {
 export function ClientesPage() {
   const { usuario } = useAuth();
   const esAdmin = usuario?.rol === "ADMIN";
+  const confirmar = useConfirm();
+  const { showToast } = useToast();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [busqueda, setBusqueda] = useState("");
   const [cargando, setCargando] = useState(false);
@@ -95,6 +105,7 @@ export function ClientesPage() {
         await clientesApi.crear(form);
       }
       setMostrarFormulario(false);
+      showToast(editandoRuc ? "Cliente actualizado" : "Cliente creado", "success");
       await cargar(busqueda);
     } catch (err) {
       setErrorFormulario(extraerMensajeError(err, "No se pudo guardar el cliente"));
@@ -102,36 +113,73 @@ export function ClientesPage() {
   }
 
   async function onDesactivar(cliente: Cliente) {
-    if (!confirm(`¿Desactivar al cliente ${cliente.razonSocial}?`)) return;
+    if (!(await confirmar(`¿Desactivar al cliente ${cliente.razonSocial}?`))) return;
     try {
       await clientesApi.desactivar(cliente.ruc);
+      showToast("Cliente desactivado", "success");
       await cargar(busqueda);
     } catch (err) {
-      setError(extraerMensajeError(err, "No se pudo desactivar el cliente"));
+      showToast(extraerMensajeError(err, "No se pudo desactivar el cliente"), "error");
     }
   }
 
+  const columnas: Column<Cliente>[] = [
+    { header: "RUC/CI", render: (c) => c.ruc },
+    { header: "Razón social", render: (c) => c.razonSocial },
+    { header: "Email", render: (c) => c.email },
+    { header: "Condición IVA", render: (c) => CONDICION_IVA_LABEL[c.condicionIva] },
+    {
+      header: "Estado",
+      render: (c) => <Badge tone={c.activo ? "ok" : "off"}>{c.activo ? "Activo" : "Inactivo"}</Badge>,
+    },
+    {
+      header: "",
+      className: "whitespace-nowrap text-right",
+      render: (c) =>
+        esAdmin ? (
+          <>
+            <Button variant="link" onClick={() => abrirEdicion(c)}>
+              Editar
+            </Button>
+            {c.activo && (
+              <Button variant="link-danger" onClick={() => onDesactivar(c)}>
+                Desactivar
+              </Button>
+            )}
+          </>
+        ) : (
+          <span className="text-sm text-texto-suave">Solo lectura</span>
+        ),
+    },
+  ];
+
   return (
     <div>
-      <div className="page-header">
-        <h1>Gestión de clientes</h1>
-        {esAdmin && <button onClick={abrirNuevo}>+ Nuevo cliente</button>}
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="m-0 text-xl font-semibold">Gestión de clientes</h1>
+        {esAdmin && (
+          <Button icon={<Plus size={16} />} onClick={abrirNuevo}>
+            Nuevo cliente
+          </Button>
+        )}
       </div>
 
-      <div className="toolbar">
+      <div className="mb-4 flex max-w-xl flex-wrap items-center gap-2">
         <input
+          className="min-w-[220px] flex-1"
           placeholder="Buscar por RUC, razón social o email…"
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && cargar(busqueda)}
         />
-        <button className="secondary" onClick={() => cargar(busqueda)}>
+        <Button variant="secondary" onClick={() => cargar(busqueda)}>
           Buscar
-        </button>
+        </Button>
         {esAdmin && (
-          <label className="checkbox-inline">
+          <label className="flex items-center gap-1.5 whitespace-nowrap text-sm text-texto-suave">
             <input
               type="checkbox"
+              className="w-auto"
               checked={mostrarInactivos}
               onChange={(e) => setMostrarInactivos(e.target.checked)}
             />
@@ -140,121 +188,85 @@ export function ClientesPage() {
         )}
       </div>
 
-      {error && <p className="error-text">{error}</p>}
-      {cargando && <p>Cargando…</p>}
+      {error && <p className="mb-3 text-sm text-rojo">{error}</p>}
 
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>RUC/CI</th>
-            <th>Razón social</th>
-            <th>Email</th>
-            <th>Condición IVA</th>
-            <th>Estado</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {clientes.map((c) => (
-            <tr key={c.ruc}>
-              <td>{c.ruc}</td>
-              <td>{c.razonSocial}</td>
-              <td>{c.email}</td>
-              <td>{CONDICION_IVA_LABEL[c.condicionIva]}</td>
-              <td>
-                <span className={`badge ${c.activo ? "badge-ok" : "badge-off"}`}>
-                  {c.activo ? "Activo" : "Inactivo"}
-                </span>
-              </td>
-              <td className="actions">
-                {esAdmin ? (
-                  <>
-                    <button className="link-button" onClick={() => abrirEdicion(c)}>
-                      Editar
-                    </button>
-                    {c.activo && (
-                      <button className="link-button danger" onClick={() => onDesactivar(c)}>
-                        Desactivar
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <span className="hint-text">Solo lectura</span>
-                )}
-              </td>
-            </tr>
-          ))}
-          {!cargando && clientes.length === 0 && (
-            <tr>
-              <td colSpan={6} className="empty-state">
-                No hay clientes para mostrar.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+      <DataTable
+        columns={columnas}
+        data={clientes}
+        keyExtractor={(c) => c.ruc}
+        loading={cargando}
+        emptyMessage="No hay clientes para mostrar."
+      />
 
       {mostrarFormulario && (
-        <div className="modal-backdrop" onClick={() => setMostrarFormulario(false)}>
-          <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={onSubmit}>
-            <h2>{editandoRuc ? "Editar cliente" : "Nuevo cliente"}</h2>
+        <Modal
+          title={editandoRuc ? "Editar cliente" : "Nuevo cliente"}
+          onClose={() => setMostrarFormulario(false)}
+        >
+          <form onSubmit={onSubmit}>
+            <FormField label="RUC / CI">
+              <input
+                value={form.ruc}
+                disabled={!!editandoRuc}
+                onChange={(e) => setForm({ ...form, ruc: e.target.value })}
+                onBlur={onValidarRuc}
+                placeholder="80012345-0"
+                required
+              />
+              {estadoRuc.validando && <p className="mt-1 text-sm text-texto-suave">Validando RUC…</p>}
+              {!estadoRuc.validando && estadoRuc.mensaje && (
+                <p className={`mt-1 text-sm ${estadoRuc.valido ? "text-verde" : "text-rojo"}`}>
+                  {estadoRuc.mensaje}
+                </p>
+              )}
+            </FormField>
 
-            <label>RUC / CI</label>
-            <input
-              value={form.ruc}
-              disabled={!!editandoRuc}
-              onChange={(e) => setForm({ ...form, ruc: e.target.value })}
-              onBlur={onValidarRuc}
-              placeholder="80012345-0"
-              required
-            />
-            {estadoRuc.validando && <p className="hint-text">Validando RUC…</p>}
-            {!estadoRuc.validando && estadoRuc.mensaje && (
-              <p className={estadoRuc.valido ? "hint-text success" : "error-text"}>{estadoRuc.mensaje}</p>
-            )}
+            <FormField label="Razón social">
+              <input
+                value={form.razonSocial}
+                onChange={(e) => setForm({ ...form, razonSocial: e.target.value })}
+                required
+              />
+            </FormField>
 
-            <label>Razón social</label>
-            <input
-              value={form.razonSocial}
-              onChange={(e) => setForm({ ...form, razonSocial: e.target.value })}
-              required
-            />
+            <FormField label="Dirección">
+              <input
+                value={form.direccion}
+                onChange={(e) => setForm({ ...form, direccion: e.target.value })}
+              />
+            </FormField>
 
-            <label>Dirección</label>
-            <input
-              value={form.direccion}
-              onChange={(e) => setForm({ ...form, direccion: e.target.value })}
-            />
+            <FormField label="Email">
+              <input
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+              />
+            </FormField>
 
-            <label>Email</label>
-            <input
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-            />
+            <FormField label="Condición ante el IVA">
+              <select
+                value={form.condicionIva}
+                onChange={(e) => setForm({ ...form, condicionIva: e.target.value as CondicionIva })}
+              >
+                {Object.entries(CONDICION_IVA_LABEL).map(([valor, etiqueta]) => (
+                  <option key={valor} value={valor}>
+                    {etiqueta}
+                  </option>
+                ))}
+              </select>
+            </FormField>
 
-            <label>Condición ante el IVA</label>
-            <select
-              value={form.condicionIva}
-              onChange={(e) => setForm({ ...form, condicionIva: e.target.value as CondicionIva })}
-            >
-              {Object.entries(CONDICION_IVA_LABEL).map(([valor, etiqueta]) => (
-                <option key={valor} value={valor}>
-                  {etiqueta}
-                </option>
-              ))}
-            </select>
+            {errorFormulario && <p className="mb-2 text-sm text-rojo">{errorFormulario}</p>}
 
-            {errorFormulario && <p className="error-text">{errorFormulario}</p>}
-
-            <div className="modal-actions">
-              <button type="button" className="secondary" onClick={() => setMostrarFormulario(false)}>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setMostrarFormulario(false)}>
                 Cancelar
-              </button>
-              <button type="submit">Guardar</button>
+              </Button>
+              <Button type="submit">Guardar</Button>
             </div>
           </form>
-        </div>
+        </Modal>
       )}
     </div>
   );

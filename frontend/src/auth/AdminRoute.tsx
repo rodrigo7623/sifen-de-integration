@@ -10,7 +10,7 @@ export function AdminRoute() {
   const { usuario } = useAuth();
 
   if (usuario?.rol !== "ADMIN") {
-    return <Navigate to="/facturas" replace />;
+    return <Navigate to="/" replace />;
   }
 
   return <Outlet />;
