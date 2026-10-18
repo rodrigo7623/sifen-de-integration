@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: sifen-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /api/auth/login
+    envVars:
+      - key: SIFEN_SECURITY_JWT_SECRET
+        generateValue: true
+      - key: SIFEN_ENVIO_MODO
+        value: stub
+      - key: SIFEN_CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: SPRING_DATASOURCE_URL
+        sync: false
+      - key: SPRING_DATASOURCE_USERNAME
+        sync: false
+      - key: SPRING_DATASOURCE_PASSWORD
+        sync: false
