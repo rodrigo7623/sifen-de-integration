@@ -38,20 +38,22 @@ sifen:
     keystore-path: ${SIFEN_FIRMA_KEYSTORE_PATH:}
     keystore-password: ${SIFEN_FIRMA_KEYSTORE_PASSWORD:}
     key-alias: ${SIFEN_FIRMA_KEY_ALIAS:}
-  emisor:
-    # Datos del emisor para el CDC (EmisorConfig). Sin default para RUC/tipo de contribuyente (son
-    # datos reales del contribuyente); establecimiento/punto de expedición sí, como placeholder
-    # provisorio hasta contar con el timbrado electrónico definitivo (el SIFEN exige haber probado
-    # en homologación antes de poder solicitarlo).
-    ruc: ${SIFEN_EMISOR_RUC:}
-    tipo-contribuyente: ${SIFEN_EMISOR_TIPO_CONTRIBUYENTE:1}
-    establecimiento: ${SIFEN_EMISOR_ESTABLECIMIENTO:001}
-    punto-expedicion: ${SIFEN_EMISOR_PUNTO_EXPEDICION:001}
+  # Los datos del emisor (RUC, dirección, actividad económica, timbrado) se cargan desde la pantalla
+  # "Configuración del emisor"; el establecimiento/punto de expedición, en cada factura.
+  qr:
+    # Código de seguridad del contribuyente (CSC) para el QR del DE (Manual Técnico v150, 13.8). Lo
+    # entrega la SET al habilitar al facturador electrónico. Default: el valor de ejemplo del manual,
+    # solo útil en el ambiente de test.
+    id-csc: ${SIFEN_QR_ID_CSC:0001}
+    csc: ${SIFEN_QR_CSC:ABCD0000000000000000000000000000}
   envio:
     # "stub" (default): EnviadorSifenStub, sin red real. "real": EnviadorSifenSoapService, con TLS
     # mutuo contra el SIFEN real (requiere sifen.firma.keystore-* configurado).
     modo: ${SIFEN_ENVIO_MODO:stub}
     timeout-segundos: ${SIFEN_ENVIO_TIMEOUT_SEGUNDOS:30}
+    # WS de consulta de RUC (siConsRUC, Manual Técnico v150, sección 9.6). Default: ambiente de test.
+    # Producción: https://sifen.set.gov.py/de/ws/consultas/consulta-ruc.wsdl
+    url-consulta-ruc: ${SIFEN_ENVIO_URL_CONSULTA_RUC:https://sifen-test.set.gov.py/de/ws/consultas/consulta-ruc.wsdl}
     # Historial append-only de cada intento real contra el SIFEN (aprobado, rechazado o con error de
     # conexión) — para poder mostrar cómo fue avanzando la integración a lo largo del tiempo.
     historial-path: ${SIFEN_ENVIO_HISTORIAL_PATH:./sifen-envios-historial.jsonl}

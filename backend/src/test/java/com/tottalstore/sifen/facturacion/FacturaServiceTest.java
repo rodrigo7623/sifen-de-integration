@@ -16,11 +16,13 @@ import com.tottalstore.sifen.clientes.ClienteRepository;
 import com.tottalstore.sifen.common.BusinessException;
 import com.tottalstore.sifen.email.EnviadorEmailService;
 import com.tottalstore.sifen.establecimientos.EstablecimientoRepository;
+import com.tottalstore.sifen.establecimientos.PuntoExpedicionRepository;
 import com.tottalstore.sifen.firma.DteFirmado;
-import com.tottalstore.sifen.firma.FirmaDigitalService;
+import com.tottalstore.sifen.firma.GeneradorDteService;
 import com.tottalstore.sifen.shared.TasaIva;
 import com.tottalstore.sifen.sifen.EnviadorSifenConfigRepository;
 import com.tottalstore.sifen.sifen.EnviadorSifenService;
+import com.tottalstore.sifen.sifen.IntentoEnvioSifenRepository;
 import com.tottalstore.sifen.sifen.RespuestaSifenRepository;
 import com.tottalstore.sifen.sifen.RespuestaSifenResult;
 import java.math.BigDecimal;
@@ -47,13 +49,17 @@ class FacturaServiceTest {
     @Mock
     private CurrentUser currentUser;
     @Mock
-    private FirmaDigitalService firmaDigitalService;
+    private GeneradorDteService generadorDteService;
+    @Mock
+    private PuntoExpedicionRepository puntoExpedicionRepository;
     @Mock
     private EnviadorSifenService enviadorSifenService;
     @Mock
     private EnviadorSifenConfigRepository enviadorSifenConfigRepository;
     @Mock
     private RespuestaSifenRepository respuestaSifenRepository;
+    @Mock
+    private IntentoEnvioSifenRepository intentoEnvioSifenRepository;
     @Mock
     private AuditoriaService auditoriaService;
     @Mock
@@ -66,9 +72,9 @@ class FacturaServiceTest {
     @BeforeEach
     void setUp() {
         facturaService = new FacturaService(
-                facturaRepository, clienteRepository, productoRepository, establecimientoRepository, currentUser,
-                firmaDigitalService, enviadorSifenService, enviadorSifenConfigRepository,
-                respuestaSifenRepository, auditoriaService, enviadorEmailService, facturaPdfGenerator);
+                facturaRepository, clienteRepository, productoRepository, establecimientoRepository,
+                puntoExpedicionRepository, currentUser, generadorDteService, enviadorSifenService, enviadorSifenConfigRepository,
+                respuestaSifenRepository, intentoEnvioSifenRepository, auditoriaService, enviadorEmailService, facturaPdfGenerator);
     }
 
     @Test
@@ -107,7 +113,8 @@ class FacturaServiceTest {
         factura.getItems().add(item(1, "100000", TasaIva.DIEZ));
 
         when(facturaRepository.findById(id)).thenReturn(java.util.Optional.of(factura));
-        when(firmaDigitalService.firmar(any())).thenReturn(new DteFirmado("<xml/>", Instant.now()));
+        factura.setNumeroDocumento(1);
+        when(generadorDteService.generar(any(), any())).thenReturn(new DteFirmado("<xml/>", Instant.now()));
         when(enviadorSifenService.enviar(any(), any(), any()))
                 .thenReturn(new RespuestaSifenResult(true, "0260", "Aprobado", "CDC-SIMULADO"));
         when(enviadorSifenConfigRepository.findAll()).thenReturn(List.of());
@@ -119,6 +126,7 @@ class FacturaServiceTest {
         assertThat(resultado.getEstadoDte()).isEqualTo(EstadoDte.APROBADO);
         assertThat(resultado.isEmailEnviado()).isTrue();
         verify(respuestaSifenRepository).save(any());
+        verify(intentoEnvioSifenRepository).save(any());
         verify(enviadorEmailService).enviar(any(), any(), any());
     }
 
@@ -132,7 +140,8 @@ class FacturaServiceTest {
         factura.getItems().add(item(1, "100000", TasaIva.DIEZ));
 
         when(facturaRepository.findById(id)).thenReturn(java.util.Optional.of(factura));
-        when(firmaDigitalService.firmar(any())).thenReturn(new DteFirmado("<xml/>", Instant.now()));
+        factura.setNumeroDocumento(1);
+        when(generadorDteService.generar(any(), any())).thenReturn(new DteFirmado("<xml/>", Instant.now()));
         when(enviadorSifenService.enviar(any(), any(), any()))
                 .thenReturn(new RespuestaSifenResult(false, "0160", "Rechazado (motivo de prueba)", null));
         when(enviadorSifenConfigRepository.findAll()).thenReturn(List.of());
@@ -162,7 +171,8 @@ class FacturaServiceTest {
         factura.setRespuestaSifen(respuestaPrevia);
 
         when(facturaRepository.findById(id)).thenReturn(java.util.Optional.of(factura));
-        when(firmaDigitalService.firmar(any())).thenReturn(new DteFirmado("<xml/>", Instant.now()));
+        factura.setNumeroDocumento(1);
+        when(generadorDteService.generar(any(), any())).thenReturn(new DteFirmado("<xml/>", Instant.now()));
         when(enviadorSifenService.enviar(any(), any(), any()))
                 .thenReturn(new RespuestaSifenResult(true, "0260", "Aprobado", "CDC-2"));
         when(enviadorSifenConfigRepository.findAll()).thenReturn(List.of());
@@ -172,6 +182,39 @@ class FacturaServiceTest {
         facturaService.confirmarEnvio(id);
 
         verify(respuestaSifenRepository).save(org.mockito.ArgumentMatchers.same(respuestaPrevia));
+    }
+
+    @Test
+    void confirmarAsignaElSiguienteNumeroDelPuntoDeExpedicionYGuardaElCdc() {
+        com.tottalstore.sifen.establecimientos.Establecimiento establecimiento = establecimientoConPunto();
+        com.tottalstore.sifen.establecimientos.PuntoExpedicion punto = establecimiento.getPuntosExpedicion().get(0);
+        punto.setUltimoNumeroDocumento(41);
+
+        UUID id = UUID.randomUUID();
+        FacturaElectronica factura = new FacturaElectronica();
+        factura.setId(id);
+        factura.setEstadoDte(EstadoDte.BORRADOR);
+        factura.setCliente(clienteActivo());
+        factura.setEstablecimiento(establecimiento);
+        factura.setPuntoExpedicion(punto);
+        factura.getItems().add(item(1, "100000", TasaIva.DIEZ));
+
+        when(facturaRepository.findById(id)).thenReturn(java.util.Optional.of(factura));
+        when(puntoExpedicionRepository.findByIdParaNumerar(punto.getId())).thenReturn(java.util.Optional.of(punto));
+        when(generadorDteService.generar(any(), any()))
+                .thenReturn(new DteFirmado("<rDE/>", Instant.now(), "0".repeat(44), "123456789"));
+        when(enviadorSifenService.enviar(any(), any(), any()))
+                .thenReturn(new RespuestaSifenResult(false, "0140", "Rechazado", null));
+        when(enviadorSifenConfigRepository.findAll()).thenReturn(List.of());
+        when(facturaRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(currentUser.obtener()).thenReturn(mock(Usuario.class));
+
+        FacturaElectronica resultado = facturaService.confirmarEnvio(id);
+
+        assertThat(resultado.getNumeroDocumento()).isEqualTo(42);
+        assertThat(punto.getUltimoNumeroDocumento()).isEqualTo(42);
+        assertThat(resultado.getCdc()).hasSize(44);
+        assertThat(resultado.getCodigoSeguridad()).isEqualTo("123456789");
     }
 
     @Test

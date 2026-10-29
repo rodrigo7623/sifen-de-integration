@@ -1,4 +1,6 @@
 import {
+  BarChart3,
+  BookOpen,
   Building2,
   FileText,
   History,
@@ -78,6 +80,11 @@ export function AppLayout() {
             {link("/facturas", "Facturas", FileText)}
             {link("/productos", "Productos", Package)}
             {link("/clientes", "Clientes", Users)}
+          </NavGroup>
+
+          <NavGroup title="Reportes">
+            {link("/reportes/libro-iva", "Libro IVA", BookOpen)}
+            {link("/reportes/rechazos", "Rechazos SIFEN", BarChart3)}
           </NavGroup>
 
           {esAdmin && (

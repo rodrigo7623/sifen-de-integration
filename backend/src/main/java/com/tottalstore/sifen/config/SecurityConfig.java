@@ -63,6 +63,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/usuarios/**").hasRole("ADMIN")
                         // Visor de auditoría: solo ADMIN (es información sensible de todos los usuarios).
                         .requestMatchers("/api/auditoria/**").hasRole("ADMIN")
+                        // Diagnóstico de conectividad con el SIFEN real (usa el certificado del emisor).
+                        .requestMatchers("/api/sifen/**").hasRole("ADMIN")
                         // Configuración de emisor: lectura para ambos roles, edición solo ADMIN.
                         .requestMatchers(HttpMethod.PUT, "/api/configuracion/**").hasRole("ADMIN")
                         // Establecimientos y puntos de expedición: lectura para ambos roles (lo

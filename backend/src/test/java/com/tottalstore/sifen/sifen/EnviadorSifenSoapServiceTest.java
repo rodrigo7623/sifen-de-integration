@@ -18,35 +18,20 @@ class EnviadorSifenSoapServiceTest {
                 SSLContext.getDefault(),
                 mock(EnviadorSifenConfigRepository.class),
                 mock(SifenEnvioHistorial.class),
-                new CdcGenerator(),
-                new EmisorConfig("4309652-2", 1, "001", "001"),
                 30);
     }
 
     @Test
-    void envuelveElContenidoEnRDeYDeConElCdcComoId() throws Exception {
+    void construyeElSobreSoapConDIdYElRDeFirmadoSinModificarDentroDeXDE() throws Exception {
         EnviadorSifenSoapService service = nuevoServicio();
+        String rDe = "<rDE xmlns=\"http://ekuatia.set.gov.py/sifen/xsd\"><dVerFor>150</dVerFor><DE Id=\"X\">contenido</DE></rDE>";
 
-        String de = service.envolverEnDe("0144444401700100100145282201701251587326098",
-                "<algo>placeholder</algo>");
-
-        assertThat(de).isEqualTo(
-                "<rDE xmlns=\"http://ekuatia.set.gov.py/sifen/xsd\">"
-                        + "<DE Id=\"0144444401700100100145282201701251587326098\">"
-                        + "<algo>placeholder</algo>"
-                        + "</DE></rDE>");
-    }
-
-    @Test
-    void construyeElSobreSoapConDIdYElXmlDelDeAdentroDeXDE() throws Exception {
-        EnviadorSifenSoapService service = nuevoServicio();
-
-        String sobre = service.construirSobreSoap("10000011111111", "<DE Id=\"X\">contenido</DE>");
+        String sobre = service.construirSobreSoap("10000011111111", rDe);
 
         assertThat(sobre).contains("xmlns:soap=\"http://www.w3.org/2003/05/soap-envelope\"");
         assertThat(sobre).contains("<rEnviDe xmlns=\"http://ekuatia.set.gov.py/sifen/xsd\">");
         assertThat(sobre).contains("<dId>10000011111111</dId>");
-        assertThat(sobre).contains("<xDE><DE Id=\"X\">contenido</DE></xDE>");
+        assertThat(sobre).contains("<xDE>" + rDe + "</xDE>");
     }
 
     @Test

@@ -36,6 +36,10 @@ public class PuntoExpedicion {
 
     private boolean activo = true;
 
+    /** Último número de documento (C007 dNumDoc) asignado en este punto de expedición. */
+    @Column(name = "ultimo_numero_documento")
+    private int ultimoNumeroDocumento;
+
     @Column(name = "created_at")
     private Instant createdAt = Instant.now();
 }

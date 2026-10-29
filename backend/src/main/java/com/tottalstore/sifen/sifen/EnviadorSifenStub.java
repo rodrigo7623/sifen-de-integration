@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
  * <p>Para poder probar manualmente el flujo de "gestión de rechazados" (Release 2 / M3) sin un
  * SIFEN real que rechace nada, este stub rechaza de forma determinística cuando el XML contiene la
  * palabra "RECHAZAR" (por ejemplo, en la descripción de un ítem) — ver
- * {@code FacturaService#construirXmlSimplificado}.
+ * {@code GeneradorDteStub}.
  */
 @Component
 @ConditionalOnProperty(name = "sifen.envio.modo", havingValue = "stub", matchIfMissing = true)

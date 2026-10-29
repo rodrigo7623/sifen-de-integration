@@ -137,6 +137,9 @@ export interface Factura {
   items: ItemFactura[];
   motivoRechazo: string | null;
   emailEnviado: boolean;
+  /** 001-001-0000001; null mientras la factura nunca se confirmó. */
+  numero: string | null;
+  cdc: string | null;
 }
 
 export interface RechazoResumen {
@@ -192,4 +195,84 @@ export interface ConfiguracionEmisor {
   timbradoNumero: string | null;
   timbradoFechaInicio: string | null;
   timbradoFechaFin: string | null;
+}
+
+export interface RenglonLibroIva {
+  facturaId: string;
+  fecha: string;
+  tipoComprobante: string;
+  numero: string;
+  timbrado: string | null;
+  cdc: string | null;
+  clienteRuc: string;
+  clienteRazonSocial: string;
+  condicion: string;
+  gravado10: number;
+  iva10: number;
+  gravado5: number;
+  iva5: number;
+  exento: number;
+  total: number;
+}
+
+export interface LibroIva {
+  periodo: string;
+  emisorRuc: string | null;
+  emisorRazonSocial: string | null;
+  renglones: RenglonLibroIva[];
+  totales: {
+    cantidadComprobantes: number;
+    gravado10: number;
+    iva10: number;
+    baseImponible10: number;
+    gravado5: number;
+    iva5: number;
+    baseImponible5: number;
+    exento: number;
+    totalIva: number;
+    total: number;
+  };
+}
+
+export interface ReporteRechazos {
+  desde: string;
+  hasta: string;
+  totalIntentos: number;
+  aprobados: number;
+  rechazados: number;
+  tasaAprobacion: number | null;
+  facturasConRechazo: number;
+  porCodigo: { codigo: string; mensaje: string | null; cantidad: number; ultimaVez: string }[];
+  porMes: { mes: string; intentos: number; aprobados: number; rechazados: number }[];
+  ultimosRechazos: {
+    facturaId: string;
+    fecha: string;
+    clienteRuc: string;
+    clienteRazonSocial: string;
+    codigo: string | null;
+    mensaje: string | null;
+  }[];
+}
+
+export interface HistorialCliente {
+  ruc: string;
+  razonSocial: string;
+  cantidadFacturas: number;
+  aprobadas: number;
+  rechazadas: number;
+  pendientes: number;
+  montoAprobado: number;
+  intentosEnvio: number;
+  intentosRechazados: number;
+  ultimaFactura: string | null;
+  facturas: {
+    facturaId: string;
+    fechaEmision: string;
+    numero: string;
+    estado: EstadoDte;
+    total: number;
+    intentos: number;
+    ultimoCodigo: string | null;
+    ultimoMensaje: string | null;
+  }[];
 }

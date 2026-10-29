@@ -62,6 +62,11 @@ export function FacturasPage() {
   }
 
   const columnas: Column<Factura>[] = [
+    {
+      header: "Número",
+      render: (f) => f.numero ?? <span className="text-xs text-texto-suave">Borrador</span>,
+      className: "whitespace-nowrap",
+    },
     { header: "Fecha", render: (f) => new Date(f.fechaEmision).toLocaleString("es-PY") },
     { header: "Cliente", render: (f) => f.clienteRazonSocial },
     {

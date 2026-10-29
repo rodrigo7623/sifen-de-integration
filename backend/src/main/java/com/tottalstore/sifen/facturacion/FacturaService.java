@@ -12,20 +12,24 @@ import com.tottalstore.sifen.email.EnviadorEmailService;
 import com.tottalstore.sifen.establecimientos.Establecimiento;
 import com.tottalstore.sifen.establecimientos.EstablecimientoRepository;
 import com.tottalstore.sifen.establecimientos.PuntoExpedicion;
+import com.tottalstore.sifen.establecimientos.PuntoExpedicionRepository;
 import com.tottalstore.sifen.facturacion.dto.FacturaRequest;
 import com.tottalstore.sifen.facturacion.dto.ItemFacturaRequest;
 import com.tottalstore.sifen.firma.DteFirmado;
-import com.tottalstore.sifen.firma.FirmaDigitalService;
+import com.tottalstore.sifen.firma.GeneradorDteService;
 import com.tottalstore.sifen.shared.TasaIva;
 import com.tottalstore.sifen.sifen.Ambiente;
 import com.tottalstore.sifen.sifen.EnviadorSifenConfig;
 import com.tottalstore.sifen.sifen.EnviadorSifenConfigRepository;
 import com.tottalstore.sifen.sifen.EnviadorSifenService;
+import com.tottalstore.sifen.sifen.IntentoEnvioSifen;
+import com.tottalstore.sifen.sifen.IntentoEnvioSifenRepository;
 import com.tottalstore.sifen.sifen.RespuestaSifen;
 import com.tottalstore.sifen.sifen.RespuestaSifenRepository;
 import com.tottalstore.sifen.sifen.RespuestaSifenResult;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -39,11 +43,13 @@ public class FacturaService {
     private final ClienteRepository clienteRepository;
     private final ProductoRepository productoRepository;
     private final EstablecimientoRepository establecimientoRepository;
+    private final PuntoExpedicionRepository puntoExpedicionRepository;
     private final CurrentUser currentUser;
-    private final FirmaDigitalService firmaDigitalService;
+    private final GeneradorDteService generadorDteService;
     private final EnviadorSifenService enviadorSifenService;
     private final EnviadorSifenConfigRepository enviadorSifenConfigRepository;
     private final RespuestaSifenRepository respuestaSifenRepository;
+    private final IntentoEnvioSifenRepository intentoEnvioSifenRepository;
     private final AuditoriaService auditoriaService;
     private final EnviadorEmailService enviadorEmailService;
     private final FacturaPdfGenerator facturaPdfGenerator;
@@ -53,11 +59,13 @@ public class FacturaService {
             ClienteRepository clienteRepository,
             ProductoRepository productoRepository,
             EstablecimientoRepository establecimientoRepository,
+            PuntoExpedicionRepository puntoExpedicionRepository,
             CurrentUser currentUser,
-            FirmaDigitalService firmaDigitalService,
+            GeneradorDteService generadorDteService,
             EnviadorSifenService enviadorSifenService,
             EnviadorSifenConfigRepository enviadorSifenConfigRepository,
             RespuestaSifenRepository respuestaSifenRepository,
+            IntentoEnvioSifenRepository intentoEnvioSifenRepository,
             AuditoriaService auditoriaService,
             EnviadorEmailService enviadorEmailService,
             FacturaPdfGenerator facturaPdfGenerator) {
@@ -65,11 +73,13 @@ public class FacturaService {
         this.clienteRepository = clienteRepository;
         this.productoRepository = productoRepository;
         this.establecimientoRepository = establecimientoRepository;
+        this.puntoExpedicionRepository = puntoExpedicionRepository;
         this.currentUser = currentUser;
-        this.firmaDigitalService = firmaDigitalService;
+        this.generadorDteService = generadorDteService;
         this.enviadorSifenService = enviadorSifenService;
         this.enviadorSifenConfigRepository = enviadorSifenConfigRepository;
         this.respuestaSifenRepository = respuestaSifenRepository;
+        this.intentoEnvioSifenRepository = intentoEnvioSifenRepository;
         this.auditoriaService = auditoriaService;
         this.enviadorEmailService = enviadorEmailService;
         this.facturaPdfGenerator = facturaPdfGenerator;
@@ -128,13 +138,21 @@ public class FacturaService {
         factura.setEstadoDte(EstadoDte.EN_VALIDACION);
         validarParaEnvio(factura);
 
-        // CU-03: firma digital del DTE (stub, ver FirmaDigitalService).
-        DteFirmado firmado = firmaDigitalService.firmar(construirXmlSimplificado(factura));
+        // La fecha de emisión del DE es la de la confirmación, no la de creación del borrador: el
+        // SIFEN acepta como máximo 30 días de atraso (D002).
+        asignarNumeroDocumento(factura);
+        factura.setFechaEmision(Instant.now());
+
+        // CU-03: generación del XML del DE y firma digital (ver GeneradorDteService).
+        Ambiente ambiente = ambienteActual();
+        DteFirmado firmado = generadorDteService.generar(factura, ambiente);
+        factura.setCdc(firmado.cdc());
+        factura.setCodigoSeguridad(firmado.codigoSeguridad());
         factura.setEstadoDte(EstadoDte.FIRMADO);
 
-        // CU-04: envío al SIFEN (stub, ver EnviadorSifenService).
+        // CU-04: envío al SIFEN (ver EnviadorSifenService).
         factura.setEstadoDte(EstadoDte.ENVIADO_SIFEN);
-        RespuestaSifenResult resultado = enviadorSifenService.enviar(factura.getId(), firmado.xmlFirmado(), ambienteActual());
+        RespuestaSifenResult resultado = enviadorSifenService.enviar(factura.getId(), firmado.xmlFirmado(), ambiente);
 
         // Si esta factura ya fue rechazada antes (reabrir → editar → confirmar de nuevo), ya existe
         // una fila en respuesta_sifen (factura_id es unique): hay que actualizarla, no insertar otra.
@@ -148,6 +166,15 @@ public class FacturaService {
         // Lado inverso del OneToOne: sin esto, la factura devuelta en esta misma request todavía no
         // "ve" la respuesta que se acaba de guardar (JPA no sincroniza el lado mappedBy en memoria).
         factura.setRespuestaSifen(respuesta);
+
+        // Historial de intentos para las estadísticas de rechazo (respuesta_sifen solo guarda el último).
+        IntentoEnvioSifen intento = new IntentoEnvioSifen();
+        intento.setFactura(factura);
+        intento.setAmbiente(ambiente);
+        intento.setAprobado(resultado.aprobado());
+        intento.setCodigo(resultado.codigo());
+        intento.setDescripcion(resultado.descripcion());
+        intentoEnvioSifenRepository.save(intento);
 
         factura.setEstadoDte(resultado.aprobado() ? EstadoDte.APROBADO : EstadoDte.RECHAZADO);
         FacturaElectronica guardada = facturaRepository.save(factura);
@@ -277,19 +304,21 @@ public class FacturaService {
                 .orElse(Ambiente.TEST);
     }
 
-    private String construirXmlSimplificado(FacturaElectronica factura) {
-        // TODO: reemplazar por el generador real del XML del DTE conforme al Manual Técnico del
-        // SIFEN (RNF-05); esta representación mínima solo sirve para ejercitar el flujo de firma/envío.
-        // Nota: incluir la descripción de los ítems permite, en pruebas manuales/Postman, forzar un
-        // rechazo simulado agregando la palabra "RECHAZAR" en algún ítem (ver EnviadorSifenStub).
-        StringBuilder items = new StringBuilder();
-        for (ItemFactura item : factura.getItems()) {
-            items.append("<item>").append(item.getDescripcion()).append("</item>");
+    /**
+     * C007 dNumDoc: el siguiente número del punto de expedición, con la fila bloqueada para que dos
+     * confirmaciones simultáneas no reciban el mismo. Una factura rechazada que se reabre y se
+     * reenvía conserva su número (un DE rechazado no consume numeración en el SIFEN).
+     */
+    private void asignarNumeroDocumento(FacturaElectronica factura) {
+        if (factura.getNumeroDocumento() != null) {
+            return;
         }
-        return "<DTE><idFactura>" + factura.getId() + "</idFactura>"
-                + "<clienteRuc>" + factura.getCliente().getRuc() + "</clienteRuc>"
-                + "<totalGeneral>" + factura.getTotalGeneral() + "</totalGeneral>"
-                + "<items>" + items + "</items></DTE>";
+        PuntoExpedicion punto = puntoExpedicionRepository.findByIdParaNumerar(factura.getPuntoExpedicion().getId())
+                .orElseThrow(() -> new NotFoundException("Punto de expedición no encontrado"));
+        int siguiente = punto.getUltimoNumeroDocumento() + 1;
+        punto.setUltimoNumeroDocumento(siguiente);
+        puntoExpedicionRepository.save(punto);
+        factura.setNumeroDocumento(siguiente);
     }
 
     private void aplicarItems(FacturaElectronica factura, List<ItemFacturaRequest> itemsRequest) {

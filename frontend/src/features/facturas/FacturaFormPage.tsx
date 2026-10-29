@@ -64,6 +64,8 @@ export function FacturaFormPage() {
 
   const [facturaId, setFacturaId] = useState<string | null>(null);
   const [estadoDte, setEstadoDte] = useState<EstadoDte | null>(null);
+  const [numero, setNumero] = useState<string | null>(null);
+  const [cdc, setCdc] = useState<string | null>(null);
   const [clienteRazonSocial, setClienteRazonSocial] = useState<string | null>(null);
   const [establecimientoTexto, setEstablecimientoTexto] = useState<string | null>(null);
   const [puntoExpedicionTexto, setPuntoExpedicionTexto] = useState<string | null>(null);
@@ -110,6 +112,8 @@ export function FacturaFormPage() {
   function cargarDesdeFactura(factura: Awaited<ReturnType<typeof facturasApi.obtener>>) {
     setFacturaId(factura.id);
     setEstadoDte(factura.estadoDte);
+    setNumero(factura.numero);
+    setCdc(factura.cdc);
     setClienteRuc(factura.clienteRuc);
     setClienteRazonSocial(factura.clienteRazonSocial);
     setEstablecimientoId(factura.establecimientoId);
@@ -206,6 +210,8 @@ export function FacturaFormPage() {
       const factura = facturaId ? await facturasApi.editar(facturaId, input) : await facturasApi.crear(input);
       setFacturaId(factura.id);
       setEstadoDte(factura.estadoDte);
+      setNumero(factura.numero);
+      setCdc(factura.cdc);
       setClienteRazonSocial(factura.clienteRazonSocial);
       showToast("Borrador guardado", "success");
       if (!id) {
@@ -226,6 +232,8 @@ export function FacturaFormPage() {
     try {
       const factura = await facturasApi.confirmar(facturaId);
       setEstadoDte(factura.estadoDte);
+      setNumero(factura.numero);
+      setCdc(factura.cdc);
       setMotivoRechazo(factura.motivoRechazo);
       setEmailEnviado(factura.emailEnviado);
       showToast(
@@ -247,6 +255,8 @@ export function FacturaFormPage() {
     try {
       const factura = await facturasApi.reabrir(facturaId);
       setEstadoDte(factura.estadoDte);
+      setNumero(factura.numero);
+      setCdc(factura.cdc);
       setMotivoRechazo(factura.motivoRechazo);
     } catch (err) {
       setError(extraerMensajeError(err, "No se pudo reabrir la factura"));
@@ -259,7 +269,7 @@ export function FacturaFormPage() {
     if (!facturaId) return;
     try {
       const blob = tipo === "pdf" ? await facturasApi.descargarPdf(facturaId) : await facturasApi.descargarXml(facturaId);
-      descargarArchivo(blob, `factura-${facturaId}.${tipo}`);
+      descargarArchivo(blob, `factura-${numero ?? facturaId}.${tipo}`);
     } catch (err) {
       showToast(extraerMensajeError(err, `No se pudo descargar el ${tipo.toUpperCase()}`), "error");
     }
@@ -274,7 +284,9 @@ export function FacturaFormPage() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="m-0 text-xl font-semibold">{id ? "Factura" : "Nueva factura manual"}</h1>
+        <h1 className="m-0 text-xl font-semibold">
+          {id ? (numero ? `Factura N° ${numero}` : "Factura (borrador)") : "Nueva factura manual"}
+        </h1>
         <Button variant="secondary" onClick={() => navigate("/facturas")}>
           Volver
         </Button>
@@ -283,6 +295,7 @@ export function FacturaFormPage() {
       {estadoDte && (
         <p className="mb-3 flex items-center gap-2 text-sm">
           Estado: <Badge tone={badgeTone(estadoDte)}>{ESTADO_DTE_LABEL[estadoDte]}</Badge>
+          {cdc && <span className="font-mono text-xs text-texto-suave">CDC {cdc}</span>}
           {emailEnviado && (
             <span className="inline-flex items-center gap-1 text-xs text-texto-suave">
               <Mail size={12} /> Enviada por correo al cliente

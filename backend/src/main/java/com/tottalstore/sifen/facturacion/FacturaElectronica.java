@@ -73,6 +73,18 @@ public class FacturaElectronica {
     @Column(name = "email_enviado")
     private boolean emailEnviado = false;
 
+    /** Número del documento dentro de su punto de expedición (C007 dNumDoc). Se asigna al confirmar
+     * por primera vez y se conserva en los reenvíos tras un rechazo. */
+    @Column(name = "numero_documento")
+    private Integer numeroDocumento;
+
+    /** CDC (A002) con el que se firmó y envió el DE por última vez. */
+    private String cdc;
+
+    /** Código de seguridad (B004 dCodSeg) que forma parte del CDC. */
+    @Column(name = "codigo_seguridad")
+    private String codigoSeguridad;
+
     // EAGER a propósito: FacturaResponse.from() siempre necesita razón social del cliente al leer
     // una factura, y open-in-view=false hace que un proxy LAZY explote (LazyInitializationException)
     // fuera del método @Transactional que cargó la factura. Es un @ManyToOne, no un @OneToMany: no
@@ -102,4 +114,14 @@ public class FacturaElectronica {
     // XML firmado fuera de la transacción que cargó la factura; es un OneToOne, sin riesgo de N+1.
     @OneToOne(mappedBy = "factura", fetch = FetchType.EAGER)
     private RespuestaSifen respuestaSifen;
+
+    /** Número impreso del comprobante (establecimiento-punto-número, p. ej. 001-001-0000001), o
+     * null si todavía no se le asignó número (borrador nunca confirmado). */
+    public String numeroComprobante() {
+        if (numeroDocumento == null || establecimiento == null || puntoExpedicion == null) {
+            return null;
+        }
+        return establecimiento.getCodigo() + "-" + puntoExpedicion.getCodigo() + "-"
+                + String.format("%07d", numeroDocumento);
+    }
 }

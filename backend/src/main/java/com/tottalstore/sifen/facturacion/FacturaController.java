@@ -64,19 +64,27 @@ public class FacturaController {
 
     @GetMapping("/{id}/xml")
     public ResponseEntity<byte[]> descargarXml(@PathVariable UUID id) {
+        FacturaElectronica factura = facturaService.obtener(id);
         String xml = facturaService.obtenerXmlFirmado(id);
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_XML)
-                .header("Content-Disposition", "attachment; filename=\"factura-" + id + ".xml\"")
+                .header("Content-Disposition", "attachment; filename=\"" + nombreArchivo(factura) + ".xml\"")
                 .body(xml.getBytes(StandardCharsets.UTF_8));
     }
 
     @GetMapping("/{id}/pdf")
     public ResponseEntity<byte[]> descargarPdf(@PathVariable UUID id) {
-        byte[] pdf = facturaPdfGenerator.generar(facturaService.obtener(id));
+        FacturaElectronica factura = facturaService.obtener(id);
+        byte[] pdf = facturaPdfGenerator.generar(factura);
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
-                .header("Content-Disposition", "attachment; filename=\"factura-" + id + ".pdf\"")
+                .header("Content-Disposition", "attachment; filename=\"" + nombreArchivo(factura) + ".pdf\"")
                 .body(pdf);
+    }
+
+    /** factura-001-001-0000001; con el id si todavía no tiene número. */
+    static String nombreArchivo(FacturaElectronica factura) {
+        String numero = factura.numeroComprobante();
+        return "factura-" + (numero != null ? numero : factura.getId());
     }
 }

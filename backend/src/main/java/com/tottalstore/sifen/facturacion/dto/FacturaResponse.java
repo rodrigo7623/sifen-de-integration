@@ -28,7 +28,10 @@ public record FacturaResponse(
         Instant fechaEmision,
         List<ItemFacturaResponse> items,
         String motivoRechazo,
-        boolean emailEnviado) {
+        boolean emailEnviado,
+        /** Número impreso 001-001-0000001; null mientras no se confirmó nunca. */
+        String numero,
+        String cdc) {
 
     public static FacturaResponse from(FacturaElectronica f) {
         boolean rechazada = f.getEstadoDte() == EstadoDte.RECHAZADO;
@@ -52,6 +55,8 @@ public record FacturaResponse(
                 f.getFechaEmision(),
                 f.getItems().stream().map(ItemFacturaResponse::from).toList(),
                 rechazada && f.getRespuestaSifen() != null ? f.getRespuestaSifen().getDescripcion() : null,
-                f.isEmailEnviado());
+                f.isEmailEnviado(),
+                f.numeroComprobante(),
+                f.getCdc());
     }
 }

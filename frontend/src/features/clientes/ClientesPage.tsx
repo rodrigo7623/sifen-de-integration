@@ -10,6 +10,7 @@ import { type Column, DataTable } from "../../components/ui/DataTable";
 import { FormField } from "../../components/ui/FormField";
 import { Modal } from "../../components/ui/Modal";
 import { useToast } from "../../components/ui/ToastProvider";
+import { HistorialClienteModal } from "../reportes/HistorialClienteModal";
 import { clientesApi, type ClienteInput } from "./api";
 
 const FORM_VACIO: ClienteInput = {
@@ -40,6 +41,7 @@ export function ClientesPage() {
     valido: true,
   });
   const [mostrarInactivos, setMostrarInactivos] = useState(false);
+  const [historialRuc, setHistorialRuc] = useState<string | null>(null);
 
   async function cargar(q?: string, incluirInactivos = mostrarInactivos) {
     setCargando(true);
@@ -138,6 +140,9 @@ export function ClientesPage() {
       render: (c) =>
         esAdmin ? (
           <>
+            <Button variant="link" onClick={() => setHistorialRuc(c.ruc)}>
+              Historial
+            </Button>
             <Button variant="link" onClick={() => abrirEdicion(c)}>
               Editar
             </Button>
@@ -148,7 +153,9 @@ export function ClientesPage() {
             )}
           </>
         ) : (
-          <span className="text-sm text-texto-suave">Solo lectura</span>
+          <Button variant="link" onClick={() => setHistorialRuc(c.ruc)}>
+            Historial
+          </Button>
         ),
     },
   ];
@@ -197,6 +204,8 @@ export function ClientesPage() {
         loading={cargando}
         emptyMessage="No hay clientes para mostrar."
       />
+
+      {historialRuc && <HistorialClienteModal ruc={historialRuc} onClose={() => setHistorialRuc(null)} />}
 
       {mostrarFormulario && (
         <Modal

@@ -11,6 +11,8 @@ import { EstablecimientosPage } from "./features/establecimientos/Establecimient
 import { ProductosPage } from "./features/catalogo/ProductosPage";
 import { FacturasPage } from "./features/facturas/FacturasPage";
 import { FacturaFormPage } from "./features/facturas/FacturaFormPage";
+import { LibroIvaPage } from "./features/reportes/LibroIvaPage";
+import { RechazosPage } from "./features/reportes/RechazosPage";
 import { UsuariosPage } from "./features/usuarios/UsuariosPage";
 import { AppLayout } from "./layout/AppLayout";
 
@@ -28,6 +30,8 @@ export function App() {
             <Route path="/facturas/:id" element={<FacturaFormPage />} />
             <Route path="/productos" element={<ProductosPage />} />
             <Route path="/clientes" element={<ClientesPage />} />
+            <Route path="/reportes/libro-iva" element={<LibroIvaPage />} />
+            <Route path="/reportes/rechazos" element={<RechazosPage />} />
             <Route element={<AdminRoute />}>
               <Route path="/usuarios" element={<UsuariosPage />} />
               <Route path="/auditoria" element={<AuditoriaPage />} />
