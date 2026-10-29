@@ -1,0 +1,5 @@
+target/
+emails-simulados/
+sifen-envios-historial.jsonl
+.env
+*.log
