@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "SIFEN Manager - Tottal Store",
-    "description": "Coleccion para probar el backend (Release 1): auth, catalogo, clientes, facturacion manual y ABM de usuarios. Correr primero 'Login' (guarda el token automaticamente); el resto de las carpetas usan Bearer Auth heredado de la coleccion. Cada corrida genera codigo/RUC/email unicos (runId), por lo que la coleccion completa se puede correr repetidas veces sin conflictos.",
+    "description": "Coleccion para probar el backend (Releases 1 a 3): auth, catalogo, clientes, facturacion manual y ABM de usuarios. Correr primero 'Login' (guarda el token automaticamente); el resto de las carpetas usan Bearer Auth heredado de la coleccion. Cada corrida genera codigo/RUC/email unicos (runId), por lo que la coleccion completa se puede correr repetidas veces sin conflictos. Release 3 agrega: notas de crédito/débito (M6), Libro IVA y reportes (M4) y consulta de RUC al SIFEN.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -65,6 +65,26 @@
     },
     {
       "key": "establecimientoIdNuevo",
+      "value": ""
+    },
+    {
+      "key": "facturaIdR3",
+      "value": ""
+    },
+    {
+      "key": "notaCreditoId",
+      "value": ""
+    },
+    {
+      "key": "notaDebitoId",
+      "value": ""
+    },
+    {
+      "key": "notaCreditoTotalId",
+      "value": ""
+    },
+    {
+      "key": "periodo",
       "value": ""
     }
   ],
@@ -1158,8 +1178,16 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const runId = pm.collectionVariables.get('runId') || Date.now().toString().slice(-6);",
-                  "pm.collectionVariables.set('codigoEstablecimientoNuevo', runId.slice(-3));"
+                  "// Código de 3 dígitos libre: derivarlo del runId chocaba al repetir la colección contra la misma base.",
+                  "pm.sendRequest({",
+                  "  url: pm.variables.get(\"baseUrl\") + \"/establecimientos\",",
+                  "  header: { Authorization: \"Bearer \" + pm.collectionVariables.get(\"token\") },",
+                  "}, (err, res) => {",
+                  "  const usados = new Set(err ? [] : res.json().map((e) => e.codigo));",
+                  "  let n = Math.floor(Math.random() * 900) + 100;",
+                  "  while (usados.has(String(n))) n = n >= 999 ? 100 : n + 1;",
+                  "  pm.collectionVariables.set(\"codigoEstablecimientoNuevo\", String(n));",
+                  "});"
                 ]
               }
             },
@@ -1398,6 +1426,836 @@
               ]
             }
           }
+        }
+      ]
+    },
+    {
+      "name": "Release 3",
+      "item": [
+        {
+          "name": "M6 - Notas de crédito y débito",
+          "item": [
+            {
+              "name": "Setup: factura a acreditar (borrador)",
+              "request": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{baseUrl}}/facturas",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "facturas"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"clienteRuc\": \"{{clienteRucFactura}}\",\n  \"establecimientoId\": \"{{establecimientoIdFactura}}\",\n  \"puntoExpedicionId\": \"{{puntoExpedicionIdFactura}}\",\n  \"condicionPago\": \"CONTADO\",\n  \"items\": [\n    {\n      \"descripcion\": \"Taladro percutor 220V (R3)\",\n      \"cantidad\": 2,\n      \"precioUnitario\": 350000,\n      \"tasaIva\": \"DIEZ\"\n    }\n  ]\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 201', () => pm.response.to.have.status(201));",
+                      "pm.collectionVariables.set('facturaIdR3', pm.response.json().id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Setup: confirmar factura (APROBADO)",
+              "request": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{baseUrl}}/facturas/{{facturaIdR3}}/confirmar",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "facturas",
+                    "{{facturaIdR3}}",
+                    "confirmar"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('factura APROBADA', () => pm.expect(pm.response.json().estadoDte).to.eql('APROBADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "NC parcial: crear (devolución de 1 de 2 unidades)",
+              "request": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{baseUrl}}/notas",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "notas"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"facturaAsociadaId\": \"{{facturaIdR3}}\",\n  \"tipo\": \"NC\",\n  \"motivo\": \"DEVOLUCION\",\n  \"items\": [\n    {\n      \"descripcion\": \"Devolución taladro percutor 220V\",\n      \"cantidad\": 1,\n      \"precioUnitario\": 350000,\n      \"tasaIva\": \"DIEZ\"\n    }\n  ]\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 201', () => pm.response.to.have.status(201));",
+                      "const n = pm.response.json();",
+                      "pm.collectionVariables.set('notaCreditoId', n.id);",
+                      "pm.test('es NC en BORRADOR asociada a la factura', () => {",
+                      "  pm.expect(n.tipoDocumento).to.eql('NC');",
+                      "  pm.expect(n.estadoDte).to.eql('BORRADOR');",
+                      "  pm.expect(n.facturaAsociadaId).to.eql(pm.collectionVariables.get('facturaIdR3'));",
+                      "  pm.expect(n.motivoEmision).to.eql('DEVOLUCION');",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "NC parcial: confirmar (APROBADO)",
+              "request": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{baseUrl}}/facturas/{{notaCreditoId}}/confirmar",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "facturas",
+                    "{{notaCreditoId}}",
+                    "confirmar"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('NC APROBADA', () => pm.expect(pm.response.json().estadoDte).to.eql('APROBADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "NC por encima del saldo acreditable: rechaza (409)",
+              "request": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{baseUrl}}/notas",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "notas"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"facturaAsociadaId\": \"{{facturaIdR3}}\",\n  \"tipo\": \"NC\",\n  \"motivo\": \"DESCUENTO\",\n  \"items\": [\n    {\n      \"descripcion\": \"Descuento excesivo\",\n      \"cantidad\": 1,\n      \"precioUnitario\": 500000,\n      \"tasaIva\": \"DIEZ\"\n    }\n  ]\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 409', () => pm.response.to.have.status(409));",
+                      "pm.test('informa el saldo acreditable', () => pm.expect(pm.response.json().message).to.include('350000'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Una nota no se edita como factura (409)",
+              "request": {
+                "method": "PUT",
+                "url": {
+                  "raw": "{{baseUrl}}/facturas/{{notaCreditoId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "facturas",
+                    "{{notaCreditoId}}"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"clienteRuc\": \"{{clienteRucFactura}}\",\n  \"establecimientoId\": \"{{establecimientoIdFactura}}\",\n  \"puntoExpedicionId\": \"{{puntoExpedicionIdFactura}}\",\n  \"condicionPago\": \"CONTADO\",\n  \"items\": [\n    {\n      \"descripcion\": \"Taladro percutor 220V (R3)\",\n      \"cantidad\": 2,\n      \"precioUnitario\": 350000,\n      \"tasaIva\": \"DIEZ\"\n    }\n  ]\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 409', () => pm.response.to.have.status(409));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ND: crear y confirmar (recupero de gasto)",
+              "request": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{baseUrl}}/notas",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "notas"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"facturaAsociadaId\": \"{{facturaIdR3}}\",\n  \"tipo\": \"ND\",\n  \"motivo\": \"RECUPERO_GASTO\",\n  \"items\": [\n    {\n      \"descripcion\": \"Flete de envío\",\n      \"cantidad\": 1,\n      \"precioUnitario\": 25000,\n      \"tasaIva\": \"DIEZ\"\n    }\n  ]\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 201', () => pm.response.to.have.status(201));",
+                      "pm.collectionVariables.set('notaDebitoId', pm.response.json().id);",
+                      "pm.test('es ND', () => pm.expect(pm.response.json().tipoDocumento).to.eql('ND'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ND: confirmar (APROBADO)",
+              "request": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{baseUrl}}/facturas/{{notaDebitoId}}/confirmar",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "facturas",
+                    "{{notaDebitoId}}",
+                    "confirmar"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('ND APROBADA', () => pm.expect(pm.response.json().estadoDte).to.eql('APROBADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Notas de la factura",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/facturas/{{facturaIdR3}}/notas",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "facturas",
+                    "{{facturaIdR3}}",
+                    "notas"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('lista la NC y la ND', () => pm.expect(pm.response.json().map(n => n.tipoDocumento).sort()).to.eql(['NC','ND']));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "NC por el saldo restante: crear",
+              "request": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{baseUrl}}/notas",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "notas"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"facturaAsociadaId\": \"{{facturaIdR3}}\",\n  \"tipo\": \"NC\",\n  \"motivo\": \"DEVOLUCION\",\n  \"items\": [\n    {\n      \"descripcion\": \"Devolución del segundo taladro\",\n      \"cantidad\": 1,\n      \"precioUnitario\": 350000,\n      \"tasaIva\": \"DIEZ\"\n    }\n  ]\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 201', () => pm.response.to.have.status(201));",
+                      "pm.collectionVariables.set('notaCreditoTotalId', pm.response.json().id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "NC por el saldo restante: confirmar",
+              "request": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{baseUrl}}/facturas/{{notaCreditoTotalId}}/confirmar",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "facturas",
+                    "{{notaCreditoTotalId}}",
+                    "confirmar"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('NC APROBADA', () => pm.expect(pm.response.json().estadoDte).to.eql('APROBADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Factura totalmente acreditada queda ANULADO",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/facturas/{{facturaIdR3}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "facturas",
+                    "{{facturaIdR3}}"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('estado ANULADO', () => pm.expect(pm.response.json().estadoDte).to.eql('ANULADO'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Listar facturas filtrando por tipo NC",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/facturas?tipo=NC",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "facturas"
+                  ],
+                  "query": [
+                    {
+                      "key": "tipo",
+                      "value": "NC"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('solo notas de crédito', () => pm.response.json().forEach(f => pm.expect(f.tipoDocumento).to.eql('NC')));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Descargar PDF (KuDE) de la NC",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/facturas/{{notaCreditoId}}/pdf",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "facturas",
+                    "{{notaCreditoId}}",
+                    "pdf"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('content-type es PDF', () => pm.response.headers.get('Content-Type').includes('application/pdf'));",
+                      "pm.test('nombre de archivo de nota de crédito', () => pm.expect(pm.response.headers.get('Content-Disposition')).to.include('nota-credito-'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "M4 - Libro IVA y reportes",
+          "item": [
+            {
+              "name": "Libro IVA Ventas del mes",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/reportes/libro-iva?periodo={{periodo}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "reportes",
+                    "libro-iva"
+                  ],
+                  "query": [
+                    {
+                      "key": "periodo",
+                      "value": "{{periodo}}"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "const libro = pm.response.json();",
+                      "pm.test('incluye renglones y totales', () => { pm.expect(libro.renglones).to.be.an('array').that.is.not.empty; pm.expect(libro.totales).to.be.an('object'); });",
+                      "pm.test('las notas de crédito restan (total negativo)', () => {",
+                      "  const nc = libro.renglones.filter(r => r.facturaId === pm.collectionVariables.get('notaCreditoId'));",
+                      "  pm.expect(nc).to.have.lengthOf(1);",
+                      "  pm.expect(Number(nc[0].total)).to.be.below(0);",
+                      "});"
+                    ]
+                  }
+                },
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.collectionVariables.set('periodo', new Date().toISOString().slice(0, 7));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Libro IVA en Excel",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/reportes/libro-iva/excel?periodo={{periodo}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "reportes",
+                    "libro-iva",
+                    "excel"
+                  ],
+                  "query": [
+                    {
+                      "key": "periodo",
+                      "value": "{{periodo}}"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('es un .xlsx', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('spreadsheetml'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Libro IVA en PDF",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/reportes/libro-iva/pdf?periodo={{periodo}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "reportes",
+                    "libro-iva",
+                    "pdf"
+                  ],
+                  "query": [
+                    {
+                      "key": "periodo",
+                      "value": "{{periodo}}"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('es un PDF', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/pdf'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Libro IVA con período inválido (400)",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/reportes/libro-iva?periodo=2026-13",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "reportes",
+                    "libro-iva"
+                  ],
+                  "query": [
+                    {
+                      "key": "periodo",
+                      "value": "2026-13"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 400', () => pm.response.to.have.status(400));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Estadísticas de rechazo",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/reportes/rechazos",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "reportes",
+                    "rechazos"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('devuelve un objeto', () => pm.expect(pm.response.json()).to.be.an('object'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Historial por cliente",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/reportes/clientes/{{clienteRucFactura}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "reportes",
+                    "clientes",
+                    "{{clienteRucFactura}}"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('devuelve un objeto', () => pm.expect(pm.response.json()).to.be.an('object'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Clientes - consulta de RUC (siConsRUC)",
+          "item": [
+            {
+              "name": "Cliente ya registrado: lo devuelve sin consultar al SIFEN",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/clientes/consulta-ruc?ruc={{clienteRucFactura}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "clientes",
+                    "consulta-ruc"
+                  ],
+                  "query": [
+                    {
+                      "key": "ruc",
+                      "value": "{{clienteRucFactura}}"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "const r = pm.response.json();",
+                      "pm.test('trae el cliente local', () => { pm.expect(r.cliente).to.be.an('object'); pm.expect(r.consultadoEnSifen).to.eql(false); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Solo el número: calcula el dígito verificador",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/clientes/consulta-ruc?ruc=80000519",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "clientes",
+                    "consulta-ruc"
+                  ],
+                  "query": [
+                    {
+                      "key": "ruc",
+                      "value": "80000519"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('RUC con DV calculado', () => { pm.expect(pm.response.json().ruc).to.eql('80000519-8'); pm.expect(pm.response.json().dvCalculado).to.eql(true); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DV incorrecto: rechaza (409)",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/clientes/consulta-ruc?ruc=80000519-1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "clientes",
+                    "consulta-ruc"
+                  ],
+                  "query": [
+                    {
+                      "key": "ruc",
+                      "value": "80000519-1"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 409', () => pm.response.to.have.status(409));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Formato inválido: rechaza (409)",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/clientes/consulta-ruc?ruc=abc",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "clientes",
+                    "consulta-ruc"
+                  ],
+                  "query": [
+                    {
+                      "key": "ruc",
+                      "value": "abc"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 409', () => pm.response.to.have.status(409));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
         }
       ]
     }

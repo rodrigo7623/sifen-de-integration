@@ -19,6 +19,13 @@ function mesActual(): string {
   return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}`;
 }
 
+/** FE, NC o ND: la factura y sus notas comparten la numeración visible, así que el tipo las distingue. */
+function siglaComprobante(tipo: string) {
+  if (tipo.startsWith("Nota de crédito")) return "NC";
+  if (tipo.startsWith("Nota de débito")) return "ND";
+  return "FE";
+}
+
 export function LibroIvaPage() {
   const { showToast } = useToast();
   const [periodo, setPeriodo] = useState(mesActual());
@@ -101,6 +108,7 @@ export function LibroIvaPage() {
           <thead>
             <tr>
               <th className={TH}>Fecha</th>
+              <th className={TH}>Tipo</th>
               <th className={TH}>Número</th>
               <th className={TH}>RUC/CI</th>
               <th className={TH}>Razón social</th>
@@ -116,13 +124,13 @@ export function LibroIvaPage() {
           <tbody>
             {cargando ? (
               <tr>
-                <td colSpan={11} className="p-3">
+                <td colSpan={12} className="p-3">
                   <Skeleton rows={5} />
                 </td>
               </tr>
             ) : sinDatos ? (
               <tr>
-                <td colSpan={11}>
+                <td colSpan={12}>
                   <EmptyState message="No hay comprobantes aprobados en este período." />
                 </td>
               </tr>
@@ -131,6 +139,9 @@ export function LibroIvaPage() {
                 {libro.renglones.map((r) => (
                   <tr key={r.facturaId} className="border-b border-borde">
                     <td className={TD}>{new Date(`${r.fecha}T00:00:00`).toLocaleDateString("es-PY")}</td>
+                    <td className={TD} title={r.tipoComprobante}>
+                      {siglaComprobante(r.tipoComprobante)}
+                    </td>
                     <td className={`${TD} whitespace-nowrap`}>{r.numero}</td>
                     <td className={TD}>{r.clienteRuc}</td>
                     <td className={TD}>{r.clienteRazonSocial}</td>
@@ -144,7 +155,7 @@ export function LibroIvaPage() {
                   </tr>
                 ))}
                 <tr className="bg-azul-claro/40 font-semibold">
-                  <td className={TD} colSpan={5}>
+                  <td className={TD} colSpan={6}>
                     Totales
                   </td>
                   <td className={TD_NUM}>{guaranies(libro.totales.gravado10)}</td>

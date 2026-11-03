@@ -33,6 +33,22 @@ class ConsultaRucSifenServiceTest {
     }
 
     @Test
+    void soloElHttp400Con0160SeConsideraTransitorioYSeReintenta() {
+        String cuerpo0160 = "HTTP 400 del SIFEN: <env:Envelope><env:Body><ns2:rRetEnviDe><ns2:rProtDe><ns2:gResProc>"
+                + "<ns2:dCodRes>0160</ns2:dCodRes><ns2:dMsgRes>XML Mal Formado.</ns2:dMsgRes>"
+                + "</ns2:gResProc></ns2:rProtDe></ns2:rRetEnviDe></env:Body></env:Envelope>";
+
+        assertThat(ConsultaRucSifenService.esXmlMalFormadoTransitorio(
+                ConsultaRucResult.sinRespuesta("ERROR_HTTP", cuerpo0160))).isTrue();
+        assertThat(ConsultaRucSifenService.esXmlMalFormadoTransitorio(
+                ConsultaRucResult.sinRespuesta("ERROR_HTTP", "HTTP 302 del SIFEN (redirige a /vdesk/hangup.php3): "))).isFalse();
+        assertThat(ConsultaRucSifenService.esXmlMalFormadoTransitorio(
+                ConsultaRucResult.sinRespuesta("ERROR_CONEXION", "No se pudo conectar"))).isFalse();
+        assertThat(ConsultaRucSifenService.esXmlMalFormadoTransitorio(
+                new ConsultaRucResult(true, "0500", "RUC no existe", "80000000", null, null, null, null))).isFalse();
+    }
+
+    @Test
     void quitaElDigitoVerificadorYValidaLongitud() {
         assertThat(ConsultaRucSifenService.sinDigitoVerificador("80012345-6")).isEqualTo("80012345");
         assertThat(ConsultaRucSifenService.sinDigitoVerificador(" 4309652 ")).isEqualTo("4309652");

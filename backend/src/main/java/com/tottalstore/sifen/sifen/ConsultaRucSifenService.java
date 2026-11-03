@@ -36,6 +36,7 @@ public class ConsultaRucSifenService {
 
     private static final Logger log = LoggerFactory.getLogger(ConsultaRucSifenService.class);
     private static final String NS_SIFEN = "http://ekuatia.set.gov.py/sifen/xsd";
+    static final int MAX_INTENTOS = 3;
 
     private final HttpClient httpClient;
     private final Duration timeout;
@@ -59,8 +60,29 @@ public class ConsultaRucSifenService {
         this.enviadorSifenConfigRepository = enviadorSifenConfigRepository;
     }
 
+    /**
+     * El ambiente de test del SIFEN devuelve de forma intermitente {@code HTTP 400 / 0160 XML Mal
+     * Formado} ante el mismo sobre que en el intento siguiente responde bien (H-11). La consulta es de
+     * solo lectura, así que se reintenta: no tiene efectos colaterales.
+     */
     public ConsultaRucResult consultar(String ruc) {
         String rucSinDv = sinDigitoVerificador(ruc);
+        ConsultaRucResult resultado = intentar(rucSinDv);
+        for (int intento = 2; intento <= MAX_INTENTOS && esXmlMalFormadoTransitorio(resultado); intento++) {
+            log.info("siConsRUC devolvió 0160 para el RUC {}: reintento {} de {}", rucSinDv, intento, MAX_INTENTOS);
+            resultado = intentar(rucSinDv);
+        }
+        return resultado;
+    }
+
+    static boolean esXmlMalFormadoTransitorio(ConsultaRucResult resultado) {
+        return !resultado.respondioSifen()
+                && "ERROR_HTTP".equals(resultado.codigo())
+                && resultado.mensaje() != null
+                && resultado.mensaje().contains("<ns2:dCodRes>0160</ns2:dCodRes>");
+    }
+
+    private ConsultaRucResult intentar(String rucSinDv) {
         String dId = String.valueOf(System.currentTimeMillis());
         Ambiente ambiente = ambienteActual();
 
