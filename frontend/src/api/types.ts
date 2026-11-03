@@ -75,6 +75,37 @@ export const ESTADO_DTE_LABEL: Record<EstadoDte, string> = {
   ANULADO: "Anulado",
 };
 
+/** C002 del Manual Técnico: factura, nota de crédito, nota de débito. */
+export type TipoDocumento = "FE" | "NC" | "ND";
+
+export const TIPO_DOCUMENTO_LABEL: Record<TipoDocumento, string> = {
+  FE: "Factura",
+  NC: "Nota de crédito",
+  ND: "Nota de débito",
+};
+
+/** E401 iMotEmi. */
+export type MotivoNota =
+  | "DEVOLUCION_Y_AJUSTE_PRECIOS"
+  | "DEVOLUCION"
+  | "DESCUENTO"
+  | "BONIFICACION"
+  | "CREDITO_INCOBRABLE"
+  | "RECUPERO_COSTO"
+  | "RECUPERO_GASTO"
+  | "AJUSTE_PRECIO";
+
+export const MOTIVO_NOTA_LABEL: Record<MotivoNota, string> = {
+  DEVOLUCION_Y_AJUSTE_PRECIOS: "Devolución y ajuste de precios",
+  DEVOLUCION: "Devolución",
+  DESCUENTO: "Descuento",
+  BONIFICACION: "Bonificación",
+  CREDITO_INCOBRABLE: "Crédito incobrable",
+  RECUPERO_COSTO: "Recupero de costo",
+  RECUPERO_GASTO: "Recupero de gasto",
+  AJUSTE_PRECIO: "Ajuste de precio",
+};
+
 export type CondicionPago = "CONTADO" | "CREDITO";
 
 export const CONDICION_PAGO_LABEL: Record<CondicionPago, string> = {
@@ -127,7 +158,8 @@ export interface Factura {
   puntoExpedicionId: string;
   puntoExpedicionCodigo: string;
   puntoExpedicionDescripcion: string | null;
-  condicionPago: CondicionPago;
+  /** null en notas de crédito/débito (no informan condición de la operación). */
+  condicionPago: CondicionPago | null;
   plazoDias: number | null;
   cantidadCuotas: number | null;
   totalIva5: number;
@@ -140,6 +172,13 @@ export interface Factura {
   /** 001-001-0000001; null mientras la factura nunca se confirmó. */
   numero: string | null;
   cdc: string | null;
+  tipoDocumento: TipoDocumento;
+  /** Solo en notas de crédito/débito. */
+  motivoEmision: MotivoNota | null;
+  facturaAsociadaId: string | null;
+  facturaAsociadaNumero: string | null;
+  facturaAsociadaCdc: string | null;
+  facturaAsociadaTotal: number | null;
 }
 
 export interface RechazoResumen {
@@ -275,4 +314,20 @@ export interface HistorialCliente {
     ultimoCodigo: string | null;
     ultimoMensaje: string | null;
   }[];
+}
+
+/** GET /clientes/consulta-ruc: el cliente ya registrado o los datos del SIFEN (siConsRUC). */
+export interface ConsultaRucCliente {
+  /** Normalizado base-DV; el DV se calcula si se ingresó solo el número. */
+  ruc: string;
+  dvCalculado: boolean;
+  cliente: Cliente | null;
+  consultadoEnSifen: boolean;
+  /** true: figura en el SIFEN; false: no figura; null: no se pudo consultar. */
+  existeEnSifen: boolean | null;
+  razonSocial: string | null;
+  estado: string | null;
+  facturadorElectronico: boolean | null;
+  condicionIvaSugerida: CondicionIva | null;
+  mensaje: string;
 }

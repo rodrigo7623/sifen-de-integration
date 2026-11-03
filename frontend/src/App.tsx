@@ -11,6 +11,7 @@ import { EstablecimientosPage } from "./features/establecimientos/Establecimient
 import { ProductosPage } from "./features/catalogo/ProductosPage";
 import { FacturasPage } from "./features/facturas/FacturasPage";
 import { FacturaFormPage } from "./features/facturas/FacturaFormPage";
+import { NotaFormPage } from "./features/facturas/NotaFormPage";
 import { LibroIvaPage } from "./features/reportes/LibroIvaPage";
 import { RechazosPage } from "./features/reportes/RechazosPage";
 import { UsuariosPage } from "./features/usuarios/UsuariosPage";
@@ -28,6 +29,8 @@ export function App() {
             <Route path="/facturas" element={<FacturasPage />} />
             <Route path="/facturas/nueva" element={<FacturaFormPage />} />
             <Route path="/facturas/:id" element={<FacturaFormPage />} />
+            <Route path="/notas/nueva" element={<NotaFormPage />} />
+            <Route path="/notas/:id" element={<NotaFormPage />} />
             <Route path="/productos" element={<ProductosPage />} />
             <Route path="/clientes" element={<ClientesPage />} />
             <Route path="/reportes/libro-iva" element={<LibroIvaPage />} />

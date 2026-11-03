@@ -58,6 +58,19 @@ para la documentación de implementación. Centraliza lo que antes estaba en
 | 29/10/2026 | R3 | Envío SIFEN real | Fecha de inicio de vigencia `2026-10-29` (fecha de la aceptación) | `1107` otra vez. No se siguen probando fechas a ciegas: hay que tomar la fecha real de Marangatu |
 | 29/10/2026 | R3 | Conectividad SIFEN real | `siConsRUC` para 4309652 | Un intento devolvió `HTTP 400 / 0160 XML Mal Formado` sin cambios en el código; 12 minutos después, el mismo pedido respondió `0502 RUC encontrado` (`dRUCFactElec` sigue en N). Fallo transitorio del ambiente de test |
 | 29/10/2026 | R3 | Integración local | Descarga de PDF y XML de la factura `4bd9897b-…` con el XML real firmado | **OK**. Archivos `factura-001-001-0000001.pdf/.xml`; el KuDE muestra número, timbrado, vigencia, CDC en grupos de 4, URL de consulta de test, liquidación de IVA y el aviso "no aprobado". La razón social de test se cortaba en el encabezado; se partió en dos líneas |
+| 02/11/2026 | R3 | Unitarias | `mvn test` tras M6 (notas de crédito/débito). `GeneradorDteSifenTest` (+1): XML de la NC con CDC `05…`, `iTiDE` 5, `gCamNCDE`, `gCamDEAsoc` con el CDC de la factura y sin `gCamFE`/`gCamCond`/`iTipTra`, más el KuDE y el PDF de la NC. `FacturaServiceTest` (+8): la NC toma cliente/punto de la factura; saldo acreditable (2417) sin contar NC rechazadas; la ND no tiene límite; no se emiten notas sobre facturas no aprobadas ni con tipo FE; la NC por el total anula la factura y usa su propia numeración; la parcial no anula; `PUT /facturas` no edita notas. `LibroIvaServiceTest` (+1): la NC resta y la factura anulada sigue listada | 84 / 84 OK |
+| 02/11/2026 | R3 | Build frontend | `npm run build` con la pantalla de notas (`/notas/nueva`, `/notas/:id`), el filtro por tipo en el listado y la sección "Notas de crédito / débito" del detalle de la factura | OK (`tsc -b` sin errores) |
+| 02/11/2026 | R3 | Integración local (stub) | Migración `V8__notas_credito_debito` aplicada desde cero (V1–V8) en un schema aislado `m6_prueba` de `sifen_db`, con `ddl-auto: validate`, y flujo completo por API: factura de 241.000 → NC parcial 110.000 → NC de 131.001 (excede) → ND 22.000 → NC por el saldo 131.000 → factura anulada → nueva factura → Libro IVA, dashboard y PDF de la NC | **19 / 19 OK**. Numeraciones independientes (FE 001-001-0000002, NC …0000002, ND …0000001); la factura pasa a ANULADO; Libro IVA del mes neto 27.000 en 5 comprobantes (la NC con montos negativos); dashboard 27.000; PDF `nota-credito-001-001-0000001.pdf`. En la primera corrida el mensaje del saldo mostraba `131000.00` (escala de la columna): se formatea sin decimales. El script esperaba 400 en las reglas de negocio; el sistema devuelve 409 `BUSINESS_RULE_VIOLATION`, que es la convención del proyecto: se corrigió el script. Al terminar se borró el schema de prueba |
+| 02/11/2026 | R3 | Unitarias | `mvn test` tras la búsqueda de RUC para alta de clientes y carga de facturas: `BusquedaRucServiceTest` (6: calcula el DV si se ingresa solo el número y trae razón social/estado del SIFEN; un cliente ya registrado no consulta al SIFEN; RUC inexistente (0500) sugiere consumidor final; sin respuesta del SIFEN sigue con la validación local; en modo stub no hay consulta; DV incorrecto y formato inválido → 409) | 90 / 90 OK |
+| 02/11/2026 | R3 | Build frontend | `npm run build` con la consulta al SIFEN en el alta de clientes y el buscador por RUC con alta en el momento en la carga de factura | OK |
+| 02/11/2026 | R3 | Integración local (real) | Arranque en modo real sobre la base local: aplica `V8` en `public` (0,08 s; las 3 facturas existentes quedan como `FE`). `GET /api/clientes/consulta-ruc` con `4309652`, `80000519`, `80016096-7`, `1234` y `4309652-5` | Cliente registrado → lo devuelve sin consultar al SIFEN; DV calculado (`4309652-2`, `80000519-8`); `1234` → "el SIFEN no consulta RUC de menos de 5 dígitos"; DV incorrecto → 409. **El SIFEN de test respondió HTTP 302 a `/vdesk/hangup.php3` en todas las consultas** (ver H-11); el sistema siguió con la validación local, como estaba previsto |
+| 02/11/2026 | R3 | Integración local (real) | Reintento ~20:30 de `siConsRUC` (H-11): 15 consultas por `GET /api/clientes/consulta-ruc` y `GET /api/sifen/consulta-ruc` con `80000519`, `80016096`, `1234567`, `80000000`, `3456789` y `4309652-2` | **El 302 desapareció.** Respuestas reales: `80000519-8` → TELECEL SAE, facturador; `80016096-7` → RETAIL S.A., facturador; `1234567-9` → BRIGIDA GAUTO JARA; `80000000`/`3456789` → `0500` (sugiere consumidor final); `4309652-2` → BARTOLOME. Aprox. la mitad de los pedidos devolvió `HTTP 400 / 0160 XML Mal Formado` de forma intermitente: el mismo pedido, repetido sin cambios, alterna entre error y `0502` (ver H-11) |
+| 02/11/2026 | R3 | Envío SIFEN real | Fecha de inicio del timbrado `2026-09-01` (dato real de Marangatu, cargado por `PUT /api/configuracion/emisor`); factura `4bd9897b-…` reabierta y reenviada (nuevo CDC `01043096522001001000000112026110217174845331`) | **Desaparece el 1107.** Nuevo rechazo: `1261 TEST - Código de actividad económica incorrecto`: `cActEco` (D131) `47521` era un valor provisorio y no coincide con la actividad declarada en el RUC (ver H-09) |
+| 02/11/2026 | R3 | Envío SIFEN real | `cActEco` `47890` (dato del contribuyente) con una descripción tentativa ("COMERCIO AL POR MENOR DE OTROS PRODUCTOS EN PUESTOS DE VENTA Y MERCADOS"); factura `4bd9897b-…` reenviada (CDC `01043096522001001000000112026110218871615045`) | **Desaparece el 1261: el código es correcto.** Nuevo rechazo: `1262 TEST - Descripción de la actividad económica no corresponde al código`. El SIFEN valida también `dDesActEco` (D132) contra su catálogo: hace falta el texto exacto de Marangatu |
+| 02/11/2026 | R3 | Envío SIFEN real | `dDesActEco` exacta de Marangatu: "COMERCIO AL POR MENOR DE OTROS ARTÍCULOS EN PUESTOS DE VENTA Y MERCADOS"; factura `4bd9897b-…` reenviada | **`0260 Aprobado — Autorización del DE satisfactoria`**. Primera factura electrónica aprobada por el SIFEN de test. CDC `01043096522001001000000112026110218908797044` |
+| 02/11/2026 | R3 | Envío SIFEN real (M6) | Nota de crédito parcial (motivo Devolución, Gs. 5.500 de 11.000) sobre la factura aprobada: `POST /api/notas` + `confirmar` | **`0260 Aprobado` al primer intento.** CDC `05043096522001001000000112026110216858853890` (prefijo 05). La factura sigue `APROBADO` (saldo acreditable 5.500). KuDE de la NC verificado: título, motivo, documento asociado con el CDC de la factura, totales e IVA 500 |
+| 02/11/2026 | R3 | Unitarias | `mvn test` con RNF-03: `CifradoSecretosTest` (8: ida y vuelta, IV distinto por cifrado, valor sin `ENC` pasa tal cual, otra clave maestra no descifra, valor alterado no descifra, clave de largo incorrecto, el post-processor publica el secreto descifrado y falla si falta la clave maestra) | 98 / 98 OK (tras corregir B5) |
+| 02/11/2026 | R3 | Integración local (real) | Arranque en modo real con `SIFEN_FIRMA_KEYSTORE_PASSWORD=ENC(...)` y la clave maestra en la variable de entorno de usuario `SIFEN_MASTER_KEY` | 1.er intento: `keystore password was incorrect` (ver H-12). Corregido: "1 secreto descifrado en memoria", certificado cargado y `siConsRUC` → `0502` con TLS mutuo (6 de 6) |
 
 ---
 
@@ -357,6 +370,7 @@ Todos detectados en Release 1, al automatizar la colección de Postman con Newma
 | B2 | *Crear cliente* fallaba con 409 (RUC inválido) | Los RUC de prueba tenían un dígito verificador arbitrario | Calcular el DV (módulo 11) en el pre-request script de la colección |
 | B3 | 409 "El cliente … está desactivado" en la carpeta Facturas | Facturas reusaba el cliente/producto que las carpetas Clientes/Productos ya habían desactivado | Requests de *Setup* propias dentro de Facturas |
 | B4 | Aserción fallaba: `expected undefined to deeply equal BORRADOR` | Se comparaba contra el campo `estado`, que no existe; el real es `estadoDte` | Corregir el nombre del campo |
+| B5 | (R3, 02/11/2026) `CifradoSecretosTest.unValorAlteradoNoDescifra` fallaba 1 de cada ~5 corridas | El test alteraba un carácter del base64 que a veces caía en los bits de relleno y no cambiaba los bytes cifrados | Alterar un byte del texto cifrado decodificado (posición 14, después del IV) |
 
 ---
 
@@ -497,5 +511,84 @@ Todos detectados en Release 1, al automatizar la colección de Postman con Newma
   el SIFEN acepta el timbrado.
 - **Pendiente:** la fecha de inicio de vigencia (C008). El SIFEN rechaza `2026-10-01` y `2026-10-29`
   con 1107. Hay que tomarla de Marangatu (detalle del timbrado o de la solicitud 364010071258).
-- **Configuración local al cierre:** timbrado `04309652`, inicio `2026-10-29` (provisorio);
+- **Actualización 02/11/2026:** la fecha real de inicio es `2026-09-01` (Marangatu); con ella el SIFEN
+  ya no devuelve 1107. El siguiente rechazo es `1261` (actividad económica): `47521` no es la
+  actividad declarada en el RUC. Hay que tomar el código (y su descripción) de la constancia de RUC
+  en Marangatu.
+- **Cierre 02/11/2026:** con la actividad `47890` y su descripción exacta, el SIFEN aprueba la factura
+  (`0260`). Las tres validaciones del emisor que bloqueaban (1107, 1261, 1262) se resuelven con datos
+  reales de Marangatu, no adivinando valores.
+- **Configuración local al cierre:** timbrado `04309652`, inicio `2026-09-01` (desde el 02/11; antes `2026-10-29` provisorio);
   establecimiento 001, punto 001.
+
+### H-10 — Notas de crédito/débito (M6): reglas del SIFEN y decisión de modelo
+
+- **Fecha:** 02/11/2026 · **Origen:** implementación de M6 contra el Manual Técnico v150.
+- **Reglas del manual que condicionan el diseño:**
+  - C002 = 5 (NC) / 6 (ND); el CDC empieza con `05` / `06`.
+  - E5 `gCamNCDE` (motivo E401/E402) es obligatorio (1450) y la descripción debe coincidir con el
+    código (1452).
+  - Las notas **no** llevan E7 condición de la operación (1501), D011 tipo de transacción ni E1
+    `gCamFE`.
+  - H `gCamDEAsoc` es obligatorio (2400), una sola vez (2415), y debe referir a una factura
+    electrónica (2414) por su CDC.
+  - La suma de las NC no puede superar el total de la factura (2417). Se valida antes de enviar,
+    contando también las notas pendientes; las rechazadas no cuentan.
+- **Decisión de modelo:** la planificación preveía una entidad `NOTA_CREDITO_DEBITO` (id_nota, tipo,
+  motivo, fecha_emision, estado_dte, id_factura_referenciada) con relación 1:N a la factura. Se
+  implementó como filas de `factura_electronica` con `tipo_doc` (FE/NC/ND), `motivo_emision` y
+  `factura_asociada_id` (la misma relación 1:N). Así la nota reutiliza sin duplicar el ciclo de
+  vida del DTE: ítems, IVA, firma, envío, reintentos, KuDE, correo e historial de intentos. Los
+  campos de la entidad planificada quedan cubiertos uno a uno.
+- **Numeración:** cada tipo de documento tiene la suya por punto de expedición
+  (`punto_expedicion.ultimo_numero_nc/nd`; índice único `(punto, tipo_doc, número)`).
+- **Anulación:** cuando las NC aprobadas suman el total de la factura, esta pasa a ANULADO. En el
+  Libro IVA la factura anulada se sigue listando y las NC restan, en el mes en que se emiten.
+- **Pendiente:** probar una NC contra el SIFEN de test. Necesita primero una factura aprobada allí,
+  y eso está bloqueado por el 1107 (ver H-09).
+
+### H-11 — El SIFEN de test redirige a `/vdesk/hangup.php3` (HTTP 302)
+
+- **Fecha:** 02/11/2026 ~10:45 · **Origen:** primera prueba de la búsqueda de RUC conectada al alta
+  de clientes.
+- **Síntoma:** `siConsRUC` (`https://sifen-test.set.gov.py/de/ws/consultas/consulta-ruc.wsdl`)
+  responde HTTP 302 con `Location: /vdesk/hangup.php3` y cuerpo vacío, en 5 consultas seguidas y en
+  un reintento posterior. El 29/10 el mismo código, con la misma URL y el mismo certificado, recibía
+  `0502`/`0500`.
+- **Análisis:** `/vdesk/hangup.php3` es la URL de cierre de sesión del F5 BIG-IP APM que la SET
+  tiene delante del SIFEN: el gateway corta la conexión antes de llegar al servicio. El certificado
+  (CODE100, CI 4309652) está vigente hasta el 18/09/2027, así que no es un vencimiento. Posibles
+  causas: mantenimiento del ambiente de test, una política de acceso del gateway (p. ej. por IP de
+  origen) o un cambio del lado de la SET.
+- **Acción:** el mensaje de error ahora incluye el destino de la redirección, para diagnosticarlo. La
+  búsqueda de RUC degrada como se diseñó: valida el DV localmente y permite cargar los datos a mano.
+- **Actualización 02/11/2026 ~20:30:** el 302 ya no aparece; el SIFEN responde `0502`/`0500` con
+  datos reales. Queda un `HTTP 400 / 0160 XML Mal Formado` **intermitente** (aprox. la mitad de los
+  pedidos): el mismo sobre SOAP, reenviado sin cambios, alterna entre `0160` y `0502`. Ya se había
+  visto una vez el 29/10. Es del ambiente de test, no del XML.
+- **Pendiente:** evaluar un reintento automático de `siConsRUC` ante `0160` (la consulta es de solo
+  lectura, así que reintentar no tiene efectos colaterales). Seguir observando si el `0160` también
+  afecta a `siRecepDE`.
+
+### H-12 — RNF-03: secretos de configuración cifrados (AES-256-GCM)
+
+- **Fecha:** 02/11/2026 · **Origen:** cierre de R3 (prueba de seguridad planificada: certificado y
+  credenciales cifrados).
+- **Diseño:** cualquier propiedad puede valer `ENC(base64(iv || cifrado+tag))`. Al arrancar,
+  `DescifradoSecretosPostProcessor` (un `EnvironmentPostProcessor`) la descifra con la clave maestra
+  `SIFEN_MASTER_KEY` y la publica en memoria; los consumidores (`SifenKeystoreConfig`, CSC del QR,
+  datasource) no cambian. La clave maestra está en una variable de entorno de usuario de Windows, no
+  en el `.env` ni en el repo. El `.pfx` ya está cifrado por PKCS#12 con su contraseña, que ahora
+  también está cifrada. Las contraseñas de usuarios ya usaban BCrypt (R1).
+- **Herramienta:** `java -cp target/classes com.tottalstore.sifen.seguridad.CifradoSecretos
+  generar-clave | cifrar` (`cifrar` lee el valor sin eco). En modo real, una contraseña en texto plano
+  sigue funcionando pero deja un `WARN` de RNF-03.
+- **Hallazgo (1.er arranque):** el secreto se descifraba bien (abría el `.pfx` fuera de Spring) pero
+  el certificado fallaba con `keystore password was incorrect`. Causa: se publicaba en una
+  `MapPropertySource`; la resolución de Spring Boot pasa por `ConfigurationPropertySources`, que no
+  mapea nombres estilo variable de entorno (`SIFEN_FIRMA_KEYSTORE_PASSWORD`) en una fuente común, así
+  que ganaba el `ENC(...)` original. Corrección: publicarla como `SystemEnvironmentPropertySource`
+  con nombre `*-systemEnvironment`. El test ahora adjunta `ConfigurationPropertySources` para
+  reproducir el caso real.
+- **Estado local:** `.env` con la contraseña del certificado en `ENC(...)`; `iniciar-backend.ps1`
+  toma `SIFEN_MASTER_KEY` del ámbito de usuario si la terminal es anterior.

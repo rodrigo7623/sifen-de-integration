@@ -33,7 +33,10 @@ public class GeneradorDteStub implements GeneradorDteService {
             items.append("<item>").append(escapar(item.getDescripcion())).append("</item>");
         }
         String numero = factura.numeroComprobante();
+        String asociada = factura.getFacturaAsociada() != null
+                ? "<facturaAsociada>" + factura.getFacturaAsociada().getId() + "</facturaAsociada>" : "";
         return "<DTE><idFactura>" + factura.getId() + "</idFactura>"
+                + "<tipo>" + factura.getTipoDoc() + "</tipo>" + asociada
                 + "<numero>" + (numero != null ? numero : "") + "</numero>"
                 + "<fechaEmision>" + factura.getFechaEmision() + "</fechaEmision>"
                 + "<clienteRuc>" + escapar(factura.getCliente().getRuc()) + "</clienteRuc>"

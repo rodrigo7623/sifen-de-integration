@@ -7,6 +7,7 @@ import com.tottalstore.sifen.common.NotFoundException;
 import com.tottalstore.sifen.facturacion.EstadoDte;
 import com.tottalstore.sifen.facturacion.FacturaElectronica;
 import com.tottalstore.sifen.facturacion.FacturaRepository;
+import com.tottalstore.sifen.facturacion.TipoDocumento;
 import com.tottalstore.sifen.reportes.dto.HistorialClienteResponse;
 import com.tottalstore.sifen.reportes.dto.HistorialClienteResponse.FacturaCliente;
 import com.tottalstore.sifen.reportes.dto.ReporteRechazosResponse;
@@ -143,9 +144,10 @@ public class ReportesService {
 
         long aprobadas = contar(facturas, EstadoDte.APROBADO);
         long rechazadas = contar(facturas, EstadoDte.RECHAZADO);
+        // Neto de notas de crédito, igual que el Libro IVA y el dashboard.
         BigDecimal montoAprobado = facturas.stream()
-                .filter(f -> f.getEstadoDte() == EstadoDte.APROBADO)
-                .map(FacturaElectronica::getTotalGeneral)
+                .filter(f -> f.getEstadoDte() == EstadoDte.APROBADO || f.getEstadoDte() == EstadoDte.ANULADO)
+                .map(f -> f.getTipoDoc() == TipoDocumento.NC ? f.getTotalGeneral().negate() : f.getTotalGeneral())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         Instant ultima = facturas.stream().map(FacturaElectronica::getFechaEmision).max(Comparator.naturalOrder()).orElse(null);
 

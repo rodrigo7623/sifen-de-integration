@@ -28,7 +28,11 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-/** Factura electrónica cargada manualmente (RF-11 a RF-17, CU-02). */
+/**
+ * Documento electrónico emitido: la factura cargada manualmente (RF-11 a RF-17, CU-02) o una nota de
+ * crédito/débito que la ajusta (M6). Todos comparten el mismo ciclo de vida del DTE; el tipo
+ * distingue qué grupos lleva el XML.
+ */
 @Entity
 @Table(name = "factura_electronica")
 @Getter
@@ -41,8 +45,20 @@ public class FacturaElectronica {
     @Column(name = "id_factura")
     private UUID id;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "tipo_doc")
-    private String tipoDoc = "FE";
+    private TipoDocumento tipoDoc = TipoDocumento.FE;
+
+    /** Solo en notas: la factura que ajusta (H004 dCdCDERef = su CDC). EAGER por el mismo motivo que
+     * "cliente": FacturaResponse.from() muestra su número fuera de la transacción. */
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "factura_asociada_id")
+    private FacturaElectronica facturaAsociada;
+
+    /** Solo en notas: E401 iMotEmi. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "motivo_emision")
+    private MotivoNota motivoEmision;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "estado_dte")
@@ -123,5 +139,18 @@ public class FacturaElectronica {
         }
         return establecimiento.getCodigo() + "-" + puntoExpedicion.getCodigo() + "-"
                 + String.format("%07d", numeroDocumento);
+    }
+
+    /** CDC con el que el SIFEN conoce al DE: el del DE firmado o, en modo stub (que no firma), el
+     * simulado que devuelve el envío. */
+    public String cdcVigente() {
+        if (cdc != null) {
+            return cdc;
+        }
+        return respuestaSifen != null ? respuestaSifen.getCdc() : null;
+    }
+
+    public boolean esNota() {
+        return tipoDoc != null && tipoDoc.esNota();
     }
 }

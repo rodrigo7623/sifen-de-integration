@@ -79,7 +79,9 @@ public class ConsultaRucSifenService {
             resultado = response.statusCode() == 200
                     ? parsearRespuesta(response.body())
                     : ConsultaRucResult.sinRespuesta(
-                            "ERROR_HTTP", "HTTP " + response.statusCode() + " del SIFEN: " + truncar(response.body(), 500));
+                            "ERROR_HTTP", "HTTP " + response.statusCode() + " del SIFEN"
+                                    + response.headers().firstValue("Location").map(l -> " (redirige a " + l + ")").orElse("")
+                                    + ": " + truncar(response.body(), 500));
         } catch (Exception e) {
             log.warn("Fallo la consulta de RUC contra el SIFEN ({})", url, e);
             resultado = ConsultaRucResult.sinRespuesta(

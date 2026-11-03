@@ -17,6 +17,7 @@ import com.tottalstore.sifen.facturacion.FacturaElectronica;
 import com.tottalstore.sifen.facturacion.FacturaRepository;
 import com.tottalstore.sifen.facturacion.FacturaService;
 import com.tottalstore.sifen.facturacion.ItemFactura;
+import com.tottalstore.sifen.facturacion.TipoDocumento;
 import com.tottalstore.sifen.reportes.dto.LibroIvaResponse;
 import com.tottalstore.sifen.shared.TasaIva;
 import java.io.ByteArrayInputStream;
@@ -115,6 +116,35 @@ class LibroIvaServiceTest {
 
         assertThat(service.generar(YearMonth.of(2026, 10)).renglones().get(0).fecha())
                 .isEqualTo(java.time.LocalDate.of(2026, 10, 31));
+    }
+
+    @Test
+    void laNotaDeCreditoRestaYLaFacturaAnuladaSigueListada() {
+        FacturaElectronica factura = factura(5, "2026-10-05T10:00:00-03:00", item(1, "110000", TasaIva.DIEZ));
+        factura.setEstadoDte(EstadoDte.ANULADO);
+        FacturaElectronica nc = factura(1, "2026-10-06T10:00:00-03:00", item(1, "110000", TasaIva.DIEZ));
+        nc.setTipoDoc(TipoDocumento.NC);
+        nc.setCondicionPago(null);
+        nc.setFacturaAsociada(factura);
+        FacturaElectronica nd = factura(1, "2026-10-07T10:00:00-03:00", item(1, "22000", TasaIva.DIEZ));
+        nd.setTipoDoc(TipoDocumento.ND);
+        nd.setCondicionPago(null);
+        nd.setFacturaAsociada(factura);
+        when(facturaRepository.findEmitidasEntre(any(), any(), any())).thenReturn(List.of(factura, nc, nd));
+
+        LibroIvaResponse libro = service.generar(YearMonth.of(2026, 10));
+
+        LibroIvaResponse.Renglon renglonNc = libro.renglones().get(1);
+        assertThat(renglonNc.tipoComprobante()).isEqualTo("Nota de crédito electrónica");
+        assertThat(renglonNc.condicion()).isEqualTo("Ajusta 001-002-0000005");
+        assertThat(renglonNc.gravado10()).isEqualByComparingTo("-110000");
+        assertThat(renglonNc.iva10()).isEqualByComparingTo("-10000");
+        assertThat(renglonNc.total()).isEqualByComparingTo("-110000");
+        assertThat(libro.renglones().get(2).total()).isEqualByComparingTo("22000");
+        // La factura y su NC se compensan: queda solo la nota de débito.
+        assertThat(libro.totales().cantidadComprobantes()).isEqualTo(3);
+        assertThat(libro.totales().iva10()).isEqualByComparingTo("2000");
+        assertThat(libro.totales().total()).isEqualByComparingTo("22000");
     }
 
     @Test

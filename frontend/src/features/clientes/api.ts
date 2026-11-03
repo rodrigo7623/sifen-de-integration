@@ -1,5 +1,5 @@
 import { apiClient } from "../../api/client";
-import type { Cliente, CondicionIva, ResultadoValidacionRuc } from "../../api/types";
+import type { Cliente, CondicionIva, ConsultaRucCliente, ResultadoValidacionRuc } from "../../api/types";
 
 export interface ClienteInput {
   ruc: string;
@@ -24,6 +24,11 @@ export const clientesApi = {
   },
   async desactivar(ruc: string): Promise<void> {
     await apiClient.delete(`/clientes/${encodeURIComponent(ruc)}`);
+  },
+  /** Cliente registrado con ese RUC o, si no lo hay, los datos que devuelve el SIFEN. */
+  async consultarRuc(ruc: string): Promise<ConsultaRucCliente> {
+    const { data } = await apiClient.get<ConsultaRucCliente>("/clientes/consulta-ruc", { params: { ruc } });
+    return data;
   },
   async validarRuc(ruc: string): Promise<ResultadoValidacionRuc> {
     const { data } = await apiClient.get<ResultadoValidacionRuc>("/clientes/validar-ruc", {

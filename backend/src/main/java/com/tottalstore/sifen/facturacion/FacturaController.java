@@ -31,14 +31,22 @@ public class FacturaController {
         this.facturaPdfGenerator = facturaPdfGenerator;
     }
 
+    /** Facturas y notas de crédito/débito; {@code tipo} filtra por tipo de documento. */
     @GetMapping
-    public List<FacturaResponse> listar(@RequestParam(required = false) EstadoDte estado) {
-        return facturaService.listar(estado).stream().map(FacturaResponse::from).toList();
+    public List<FacturaResponse> listar(
+            @RequestParam(required = false) EstadoDte estado, @RequestParam(required = false) TipoDocumento tipo) {
+        return facturaService.listar(estado, tipo).stream().map(FacturaResponse::from).toList();
     }
 
     @GetMapping("/{id}")
     public FacturaResponse obtener(@PathVariable UUID id) {
         return FacturaResponse.from(facturaService.obtener(id));
+    }
+
+    /** M6: notas de crédito/débito emitidas sobre la factura. */
+    @GetMapping("/{id}/notas")
+    public List<FacturaResponse> notas(@PathVariable UUID id) {
+        return facturaService.notasDe(id).stream().map(FacturaResponse::from).toList();
     }
 
     @PostMapping
@@ -82,9 +90,14 @@ public class FacturaController {
                 .body(pdf);
     }
 
-    /** factura-001-001-0000001; con el id si todavía no tiene número. */
+    /** factura-001-001-0000001 (nota-credito-…, nota-debito-…); con el id si todavía no tiene número. */
     static String nombreArchivo(FacturaElectronica factura) {
         String numero = factura.numeroComprobante();
-        return "factura-" + (numero != null ? numero : factura.getId());
+        String prefijo = switch (factura.getTipoDoc()) {
+            case NC -> "nota-credito-";
+            case ND -> "nota-debito-";
+            default -> "factura-";
+        };
+        return prefijo + (numero != null ? numero : factura.getId());
     }
 }

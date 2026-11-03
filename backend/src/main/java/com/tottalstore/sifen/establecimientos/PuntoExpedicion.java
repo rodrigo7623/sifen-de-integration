@@ -36,9 +36,16 @@ public class PuntoExpedicion {
 
     private boolean activo = true;
 
-    /** Último número de documento (C007 dNumDoc) asignado en este punto de expedición. */
+    /** Último número de factura (C007 dNumDoc) asignado en este punto de expedición. */
     @Column(name = "ultimo_numero_documento")
     private int ultimoNumeroDocumento;
+
+    /** Últimos números de nota de crédito y de débito: cada tipo de DE se numera por separado. */
+    @Column(name = "ultimo_numero_nc")
+    private int ultimoNumeroNc;
+
+    @Column(name = "ultimo_numero_nd")
+    private int ultimoNumeroNd;
 
     @Column(name = "created_at")
     private Instant createdAt = Instant.now();

@@ -72,9 +72,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/establecimientos/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/establecimientos/**").hasRole("ADMIN")
                         // Mantenimiento de datos maestros (catálogo/clientes): solo ADMIN.
-                        // Consultarlos y emitir/confirmar facturas queda abierto a ambos roles.
-                        .requestMatchers(HttpMethod.POST, "/api/productos/**", "/api/clientes/**")
-                        .hasRole("ADMIN")
+                        // Consultarlos y emitir/confirmar facturas queda abierto a ambos roles, y
+                        // también el alta de clientes: el operador registra al cliente nuevo desde la
+                        // carga de la factura. Editar o desactivar clientes sigue siendo solo ADMIN.
+                        .requestMatchers(HttpMethod.POST, "/api/productos/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/productos/**", "/api/clientes/**")
                         .hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/productos/**", "/api/clientes/**")

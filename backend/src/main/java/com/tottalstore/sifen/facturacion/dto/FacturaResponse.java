@@ -3,6 +3,8 @@ package com.tottalstore.sifen.facturacion.dto;
 import com.tottalstore.sifen.facturacion.CondicionPago;
 import com.tottalstore.sifen.facturacion.EstadoDte;
 import com.tottalstore.sifen.facturacion.FacturaElectronica;
+import com.tottalstore.sifen.facturacion.MotivoNota;
+import com.tottalstore.sifen.facturacion.TipoDocumento;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -31,10 +33,18 @@ public record FacturaResponse(
         boolean emailEnviado,
         /** Número impreso 001-001-0000001; null mientras no se confirmó nunca. */
         String numero,
-        String cdc) {
+        String cdc,
+        TipoDocumento tipoDocumento,
+        /** Solo en notas de crédito/débito. */
+        MotivoNota motivoEmision,
+        UUID facturaAsociadaId,
+        String facturaAsociadaNumero,
+        String facturaAsociadaCdc,
+        BigDecimal facturaAsociadaTotal) {
 
     public static FacturaResponse from(FacturaElectronica f) {
         boolean rechazada = f.getEstadoDte() == EstadoDte.RECHAZADO;
+        FacturaElectronica asociada = f.getFacturaAsociada();
         return new FacturaResponse(
                 f.getId(),
                 f.getEstadoDte(),
@@ -57,6 +67,12 @@ public record FacturaResponse(
                 rechazada && f.getRespuestaSifen() != null ? f.getRespuestaSifen().getDescripcion() : null,
                 f.isEmailEnviado(),
                 f.numeroComprobante(),
-                f.getCdc());
+                f.getCdc(),
+                f.getTipoDoc(),
+                f.getMotivoEmision(),
+                asociada != null ? asociada.getId() : null,
+                asociada != null ? asociada.numeroComprobante() : null,
+                asociada != null ? asociada.cdcVigente() : null,
+                asociada != null ? asociada.getTotalGeneral() : null);
     }
 }

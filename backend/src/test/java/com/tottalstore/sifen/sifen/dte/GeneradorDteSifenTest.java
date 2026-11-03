@@ -17,6 +17,8 @@ import com.tottalstore.sifen.facturacion.EstadoDte;
 import com.tottalstore.sifen.facturacion.FacturaElectronica;
 import com.tottalstore.sifen.facturacion.FacturaPdfGenerator;
 import com.tottalstore.sifen.facturacion.ItemFactura;
+import com.tottalstore.sifen.facturacion.MotivoNota;
+import com.tottalstore.sifen.facturacion.TipoDocumento;
 import com.tottalstore.sifen.facturacion.kude.KudeDatos;
 import com.tottalstore.sifen.facturacion.kude.KudeDatosFactory;
 import com.tottalstore.sifen.sifen.RespuestaSifen;
@@ -256,6 +258,67 @@ class GeneradorDteSifenTest {
                     .contains("TOTAL IVA: 3.000")
                     .contains("REPRESENTACIÓN GRÁFICA")
                     .doesNotContain("Sin validez");
+        }
+    }
+
+    @Test
+    void laNotaDeCreditoLlevaMotivoYDocumentoAsociadoSinCondicionNiTipoDeTransaccion() throws Exception {
+        String cdcFactura = "01043096522002003000004212026102911234567892";
+        FacturaElectronica factura = factura();
+        factura.setCdc(cdcFactura);
+        FacturaElectronica nota = factura();
+        nota.setTipoDoc(TipoDocumento.NC);
+        nota.setCondicionPago(null);
+        nota.setMotivoEmision(MotivoNota.DEVOLUCION);
+        nota.setFacturaAsociada(factura);
+        nota.setNumeroDocumento(7);
+
+        DteFirmado dte = generador.generar(nota, Ambiente.TEST);
+        Document doc = parsear(dte.xmlFirmado());
+
+        // CDC: tipo de documento 05 (sección 10.1) y numeración propia de la nota.
+        assertThat(dte.cdc()).startsWith("05");
+        assertThat(texto(doc, "dNumDoc")).isEqualTo("0000007");
+        assertThat(texto(doc, "iTiDE")).isEqualTo("5");
+        assertThat(texto(doc, "dDesTiDE")).isEqualTo("Nota de crédito electrónica");
+
+        Element de = (Element) doc.getElementsByTagNameNS(NS, "DE").item(0);
+        assertThat(nombresHijos(de)).containsExactly(
+                "dDVId", "dFecFirma", "dSisFact", "gOpeDE", "gTimb", "gDatGralOpe", "gDtipDE", "gTotSub", "gCamDEAsoc");
+        Element gDtipDE = (Element) doc.getElementsByTagNameNS(NS, "gDtipDE").item(0);
+        assertThat(nombresHijos(gDtipDE)).containsExactly("gCamNCDE", "gCamItem", "gCamItem", "gCamItem");
+        assertThat(texto(doc, "iMotEmi")).isEqualTo("2");
+        assertThat(texto(doc, "dDesMotEmi")).isEqualTo("Devolución");
+        // Rechazos 1501 y D011: las notas no informan condición de la operación ni tipo de transacción.
+        assertThat(doc.getElementsByTagNameNS(NS, "gCamCond").getLength()).isZero();
+        assertThat(doc.getElementsByTagNameNS(NS, "iTipTra").getLength()).isZero();
+        assertThat(doc.getElementsByTagNameNS(NS, "gCamFE").getLength()).isZero();
+
+        Element asoc = (Element) doc.getElementsByTagNameNS(NS, "gCamDEAsoc").item(0);
+        assertThat(nombresHijos(asoc)).containsExactly("iTipDocAso", "dDesTipDocAso", "dCdCDERef");
+        assertThat(texto(doc, "iTipDocAso")).isEqualTo("1");
+        assertThat(texto(doc, "dDesTipDocAso")).isEqualTo("Electrónico");
+        assertThat(texto(doc, "dCdCDERef")).isEqualTo(cdcFactura);
+
+        KudeDatos kude = KudeDatosFactory.desdeXml(dte.xmlFirmado());
+        assertThat(kude.tipoDocumento()).isEqualTo("Nota de crédito electrónica");
+        assertThat(kude.motivoEmision()).isEqualTo("Devolución");
+        assertThat(kude.cdcDocumentoAsociado()).isEqualTo(cdcFactura);
+        assertThat(kude.condicion()).isNull();
+
+        RespuestaSifen respuesta = new RespuestaSifen();
+        respuesta.setXmlFirmado(dte.xmlFirmado());
+        nota.setRespuestaSifen(respuesta);
+        nota.setEstadoDte(EstadoDte.APROBADO);
+        byte[] pdf = new FacturaPdfGenerator(mock(ConfiguracionEmisorService.class)).generar(nota);
+        try (PDDocument pdfDoc = Loader.loadPDF(pdf)) {
+            String texto = new PDFTextStripper().getText(pdfDoc);
+            assertThat(texto)
+                    .contains("NOTA DE CRÉDITO ELECTRÓNICA")
+                    .contains("Motivo de emisión: Devolución")
+                    .contains("Documento asociado: Factura electrónica · CDC " + kude.cdcAgrupadoAsociado())
+                    .contains("Consulte la validez de esta Nota de crédito electrónica")
+                    .doesNotContain("Condición de venta");
         }
     }
 

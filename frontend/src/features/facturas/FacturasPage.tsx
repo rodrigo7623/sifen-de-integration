@@ -1,19 +1,32 @@
-import { Download, FileCode2, Mail, Plus, RotateCcw } from "lucide-react";
+import { Download, FileCode2, FileMinus2, Mail, Plus, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { extraerMensajeError } from "../../api/client";
-import { ESTADO_DTE_LABEL, type EstadoDte, type Factura } from "../../api/types";
+import {
+  CONDICION_PAGO_LABEL,
+  ESTADO_DTE_LABEL,
+  TIPO_DOCUMENTO_LABEL,
+  type EstadoDte,
+  type Factura,
+  type TipoDocumento,
+} from "../../api/types";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
 import { type Column, DataTable } from "../../components/ui/DataTable";
 import { useToast } from "../../components/ui/ToastProvider";
-import { descargarArchivo, facturasApi } from "./api";
+import { descargarArchivo, facturasApi, nombreArchivo } from "./api";
 
-function badgeTone(estado: EstadoDte): "ok" | "off" | "info" {
+function badgeTone(estado: EstadoDte): "ok" | "off" | "warn" | "info" {
   if (estado === "APROBADO") return "ok";
   if (estado === "RECHAZADO") return "off";
+  if (estado === "ANULADO") return "warn";
   return "info";
+}
+
+/** Facturas y notas comparten el ciclo de vida del DTE, pero se editan en pantallas distintas. */
+export function rutaDocumento(f: Pick<Factura, "id" | "tipoDocumento">) {
+  return f.tipoDocumento === "FE" ? `/facturas/${f.id}` : `/notas/${f.id}`;
 }
 
 export function FacturasPage() {
@@ -22,14 +35,15 @@ export function FacturasPage() {
   const { showToast } = useToast();
   const [facturas, setFacturas] = useState<Factura[]>([]);
   const [filtroEstado, setFiltroEstado] = useState<EstadoDte | "">("");
+  const [filtroTipo, setFiltroTipo] = useState<TipoDocumento | "">("");
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function cargar(estado: EstadoDte | "") {
+  async function cargar(estado: EstadoDte | "", tipo: TipoDocumento | "") {
     setCargando(true);
     setError(null);
     try {
-      setFacturas(await facturasApi.listar(estado));
+      setFacturas(await facturasApi.listar(estado, tipo));
     } catch (err) {
       setError(extraerMensajeError(err, "No se pudieron cargar las facturas"));
     } finally {
@@ -38,30 +52,44 @@ export function FacturasPage() {
   }
 
   useEffect(() => {
-    cargar(filtroEstado);
+    cargar(filtroEstado, filtroTipo);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroEstado]);
+  }, [filtroEstado, filtroTipo]);
 
   async function onReabrir(f: Factura) {
-    if (!(await confirmar("¿Reabrir esta factura rechazada para corregirla y volver a confirmarla?"))) return;
+    if (!(await confirmar("¿Reabrir este documento rechazado para corregirlo y volver a confirmarlo?"))) return;
     try {
       await facturasApi.reabrir(f.id);
-      navigate(`/facturas/${f.id}`);
+      navigate(rutaDocumento(f));
     } catch (err) {
-      showToast(extraerMensajeError(err, "No se pudo reabrir la factura"), "error");
+      showToast(extraerMensajeError(err, "No se pudo reabrir el documento"), "error");
     }
   }
 
   async function onDescargar(f: Factura, tipo: "pdf" | "xml") {
     try {
       const blob = tipo === "pdf" ? await facturasApi.descargarPdf(f.id) : await facturasApi.descargarXml(f.id);
-      descargarArchivo(blob, `factura-${f.id}.${tipo}`);
+      descargarArchivo(blob, nombreArchivo(f, tipo));
     } catch (err) {
       showToast(extraerMensajeError(err, `No se pudo descargar el ${tipo.toUpperCase()}`), "error");
     }
   }
 
   const columnas: Column<Factura>[] = [
+    {
+      header: "Tipo",
+      render: (f) => (
+        <div>
+          <span className={f.tipoDocumento === "FE" ? "" : "font-semibold text-azul-oscuro"}>
+            {TIPO_DOCUMENTO_LABEL[f.tipoDocumento]}
+          </span>
+          {f.facturaAsociadaNumero && (
+            <div className="text-xs text-texto-suave">de {f.facturaAsociadaNumero}</div>
+          )}
+        </div>
+      ),
+      className: "whitespace-nowrap",
+    },
     {
       header: "Número",
       render: (f) => f.numero ?? <span className="text-xs text-texto-suave">Borrador</span>,
@@ -77,8 +105,15 @@ export function FacturasPage() {
         </span>
       ),
     },
-    { header: "Condición", render: (f) => f.condicionPago },
-    { header: "Total", render: (f) => f.totalGeneral.toLocaleString("es-PY") },
+    {
+      header: "Condición",
+      render: (f) => (f.condicionPago ? CONDICION_PAGO_LABEL[f.condicionPago] : <span className="text-texto-suave">—</span>),
+    },
+    {
+      header: "Total",
+      render: (f) => (f.tipoDocumento === "NC" ? "−" : "") + f.totalGeneral.toLocaleString("es-PY"),
+      className: "whitespace-nowrap",
+    },
     {
       header: "Estado",
       render: (f) => (
@@ -100,15 +135,24 @@ export function FacturasPage() {
       className: "whitespace-nowrap text-right",
       render: (f) => (
         <>
-          <Button variant="link" onClick={() => navigate(`/facturas/${f.id}`)}>
+          <Button variant="link" onClick={() => navigate(rutaDocumento(f))}>
             {f.estadoDte === "BORRADOR" ? "Editar" : "Ver"}
           </Button>
+          {f.tipoDocumento === "FE" && f.estadoDte === "APROBADO" && (
+            <Button
+              variant="link"
+              icon={<FileMinus2 size={14} />}
+              onClick={() => navigate(`/notas/nueva?factura=${f.id}`)}
+            >
+              Nota
+            </Button>
+          )}
           {f.estadoDte === "RECHAZADO" && (
             <Button variant="link" icon={<RotateCcw size={14} />} onClick={() => onReabrir(f)}>
               Reabrir
             </Button>
           )}
-          {(f.estadoDte === "APROBADO" || f.estadoDte === "RECHAZADO") && (
+          {(f.estadoDte === "APROBADO" || f.estadoDte === "RECHAZADO" || f.estadoDte === "ANULADO") && (
             <>
               <Button variant="link" icon={<Download size={14} />} onClick={() => onDescargar(f, "pdf")}>
                 PDF
@@ -132,15 +176,27 @@ export function FacturasPage() {
         </Button>
       </div>
 
-      <div className="mb-4 max-w-xs">
-        <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value as EstadoDte | "")}>
-          <option value="">Todos los estados</option>
-          {Object.entries(ESTADO_DTE_LABEL).map(([valor, etiqueta]) => (
-            <option key={valor} value={valor}>
-              {etiqueta}
-            </option>
-          ))}
-        </select>
+      <div className="mb-4 flex flex-wrap gap-3">
+        <div className="w-full max-w-xs">
+          <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value as TipoDocumento | "")}>
+            <option value="">Facturas y notas</option>
+            {Object.entries(TIPO_DOCUMENTO_LABEL).map(([valor, etiqueta]) => (
+              <option key={valor} value={valor}>
+                {etiqueta}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="w-full max-w-xs">
+          <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value as EstadoDte | "")}>
+            <option value="">Todos los estados</option>
+            {Object.entries(ESTADO_DTE_LABEL).map(([valor, etiqueta]) => (
+              <option key={valor} value={valor}>
+                {etiqueta}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {error && <p className="mb-3 text-sm text-rojo">{error}</p>}

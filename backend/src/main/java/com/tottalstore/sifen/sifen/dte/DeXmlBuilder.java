@@ -6,6 +6,8 @@ import com.tottalstore.sifen.establecimientos.Establecimiento;
 import com.tottalstore.sifen.facturacion.CondicionPago;
 import com.tottalstore.sifen.facturacion.FacturaElectronica;
 import com.tottalstore.sifen.facturacion.ItemFactura;
+import com.tottalstore.sifen.facturacion.MotivoNota;
+import com.tottalstore.sifen.facturacion.TipoDocumento;
 import com.tottalstore.sifen.shared.CondicionIva;
 import com.tottalstore.sifen.shared.TasaIva;
 import com.tottalstore.sifen.sifen.Ambiente;
@@ -19,9 +21,10 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
 /**
- * Arma el XML del DE de una factura electrónica (C002 = 1) según el Manual Técnico del SIFEN v150,
- * "Tabla de formato de campos de un DE" (Schema XML 18, DE_v150.xsd). Cubre el caso que emite hoy
- * el sistema: venta de mercaderías en guaraníes, afectada al IVA, contado o crédito a plazo.
+ * Arma el XML del DE según el Manual Técnico del SIFEN v150, "Tabla de formato de campos de un DE"
+ * (Schema XML 18, DE_v150.xsd). Cubre lo que emite hoy el sistema: factura electrónica (C002 = 1) de
+ * venta de mercaderías en guaraníes, afectada al IVA, contado o crédito a plazo, y las notas de
+ * crédito/débito (C002 = 5 / 6) que la ajustan.
  *
  * <p>Se construye con DOM (no concatenando strings) para que el contenido quede escapado y el
  * documento se pueda firmar directamente. El orden de los elementos sigue el del manual: el XSD
@@ -77,8 +80,9 @@ public class DeXmlBuilder {
         // C. Timbrado
         Establecimiento establecimiento = factura.getEstablecimiento();
         Element gTimb = hijo(de, "gTimb");
-        el(gTimb, "iTiDE", "1");
-        el(gTimb, "dDesTiDE", "Factura electrónica");
+        TipoDocumento tipo = factura.getTipoDoc();
+        el(gTimb, "iTiDE", String.valueOf(tipo.codigo()));
+        el(gTimb, "dDesTiDE", tipo.descripcion());
         el(gTimb, "dNumTim", emisor.getTimbradoNumero());
         el(gTimb, "dEst", establecimiento.getCodigo());
         el(gTimb, "dPunExp", factura.getPuntoExpedicion().getCodigo());
@@ -89,8 +93,11 @@ public class DeXmlBuilder {
         Element gDatGralOpe = hijo(de, "gDatGralOpe");
         el(gDatGralOpe, "dFeEmiDE", FECHA_HORA.format(fechaEmision));
         Element gOpeCom = hijo(gDatGralOpe, "gOpeCom");
-        el(gOpeCom, "iTipTra", "1");
-        el(gOpeCom, "dDesTipTra", "Venta de mercadería");
+        // D011/D012: solo en factura y autofactura (C002 = 1 o 4).
+        if (tipo == TipoDocumento.FE) {
+            el(gOpeCom, "iTipTra", "1");
+            el(gOpeCom, "dDesTipTra", "Venta de mercadería");
+        }
         el(gOpeCom, "iTImp", "1");
         el(gOpeCom, "dDesTImp", "IVA");
         el(gOpeCom, "cMoneOpe", "PYG");
@@ -98,17 +105,24 @@ public class DeXmlBuilder {
         agregarEmisor(gDatGralOpe, emisor, establecimiento, ambiente);
         String identificacionReceptor = agregarReceptor(gDatGralOpe, factura.getCliente());
 
-        // E. Campos específicos de la factura electrónica
+        // E. Campos específicos por tipo de documento: E1 (factura) o E5 (nota de crédito/débito)
         Element gDtipDE = hijo(de, "gDtipDE");
-        Element gCamFE = hijo(gDtipDE, "gCamFE");
-        el(gCamFE, "iIndPres", "1");
-        el(gCamFE, "dDesIndPres", "Operación presencial");
-
         Totales totales = new Totales();
         for (ItemFactura item : factura.getItems()) {
             totales.sumar(item);
         }
-        agregarCondicion(gDtipDE, factura, totales.totalOperacion());
+        if (tipo == TipoDocumento.FE) {
+            Element gCamFE = hijo(gDtipDE, "gCamFE");
+            el(gCamFE, "iIndPres", "1");
+            el(gCamFE, "dDesIndPres", "Operación presencial");
+            // E7: la condición de la operación solo se informa en factura/autofactura (rechazo 1501).
+            agregarCondicion(gDtipDE, factura, totales.totalOperacion());
+        } else {
+            MotivoNota motivo = factura.getMotivoEmision();
+            Element gCamNCDE = hijo(gDtipDE, "gCamNCDE");
+            el(gCamNCDE, "iMotEmi", String.valueOf(motivo.codigo()));
+            el(gCamNCDE, "dDesMotEmi", motivo.descripcion());
+        }
         int indice = 0;
         for (ItemFactura item : factura.getItems()) {
             agregarItem(gDtipDE, item, ++indice);
@@ -138,6 +152,15 @@ public class DeXmlBuilder {
         el(gTotSub, "dBaseGrav5", num(totales.base5));
         el(gTotSub, "dBaseGrav10", num(totales.base10));
         el(gTotSub, "dTBasGraIVA", num(totales.base5.add(totales.base10)));
+
+        // H. Documento asociado: obligatorio en notas (2400), una sola vez (2415) y debe ser una FE
+        // electrónica (2414). Va después de gTotSub (y del gCamGen opcional, que no se emite).
+        if (tipo.esNota()) {
+            Element gCamDEAsoc = hijo(de, "gCamDEAsoc");
+            el(gCamDEAsoc, "iTipDocAso", "1");
+            el(gCamDEAsoc, "dDesTipDocAso", "Electrónico");
+            el(gCamDEAsoc, "dCdCDERef", factura.getFacturaAsociada().cdcVigente());
+        }
 
         return new Resultado(doc, de, num(totales.totalOperacion()), num(totales.iva5.add(totales.iva10)),
                 identificacionReceptor, factura.getItems().size());

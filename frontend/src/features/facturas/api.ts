@@ -1,5 +1,5 @@
 import { apiClient } from "../../api/client";
-import type { CondicionPago, EstadoDte, Factura, TasaIva } from "../../api/types";
+import type { CondicionPago, EstadoDte, Factura, MotivoNota, TasaIva, TipoDocumento } from "../../api/types";
 
 export interface ItemFacturaInput {
   productoCodigo: string | null;
@@ -19,11 +19,30 @@ export interface FacturaInput {
   items: ItemFacturaInput[];
 }
 
+export interface NotaInput {
+  facturaAsociadaId: string;
+  tipo: TipoDocumento;
+  motivo: MotivoNota;
+  items: ItemFacturaInput[];
+}
+
 export const facturasApi = {
-  async listar(estado?: EstadoDte | ""): Promise<Factura[]> {
+  async listar(estado?: EstadoDte | "", tipo?: TipoDocumento | ""): Promise<Factura[]> {
     const { data } = await apiClient.get<Factura[]>("/facturas", {
-      params: estado ? { estado } : undefined,
+      params: { ...(estado ? { estado } : {}), ...(tipo ? { tipo } : {}) },
     });
+    return data;
+  },
+  async notas(facturaId: string): Promise<Factura[]> {
+    const { data } = await apiClient.get<Factura[]>(`/facturas/${facturaId}/notas`);
+    return data;
+  },
+  async crearNota(input: NotaInput): Promise<Factura> {
+    const { data } = await apiClient.post<Factura>("/notas", input);
+    return data;
+  },
+  async editarNota(id: string, input: NotaInput): Promise<Factura> {
+    const { data } = await apiClient.put<Factura>(`/notas/${id}`, input);
     return data;
   },
   async obtener(id: string): Promise<Factura> {
@@ -55,6 +74,12 @@ export const facturasApi = {
     return data;
   },
 };
+
+/** Mismo nombre que arma el backend: factura-001-001-0000001, nota-credito-…, nota-debito-…. */
+export function nombreArchivo(f: Pick<Factura, "id" | "numero" | "tipoDocumento">, extension: string) {
+  const prefijo = f.tipoDocumento === "NC" ? "nota-credito" : f.tipoDocumento === "ND" ? "nota-debito" : "factura";
+  return `${prefijo}-${f.numero ?? f.id}.${extension}`;
+}
 
 /** Dispara la descarga de un blob en el navegador con el nombre de archivo dado. */
 export function descargarArchivo(blob: Blob, nombreArchivo: string) {

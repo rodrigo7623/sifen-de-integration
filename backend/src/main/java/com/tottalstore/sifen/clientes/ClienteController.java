@@ -2,6 +2,7 @@ package com.tottalstore.sifen.clientes;
 
 import com.tottalstore.sifen.clientes.dto.ClienteRequest;
 import com.tottalstore.sifen.clientes.dto.ClienteResponse;
+import com.tottalstore.sifen.clientes.dto.ConsultaRucClienteResponse;
 import com.tottalstore.sifen.facturacion.FacturaService;
 import com.tottalstore.sifen.facturacion.dto.FacturaResponse;
 import jakarta.validation.Valid;
@@ -24,10 +25,13 @@ public class ClienteController {
 
     private final ClienteService clienteService;
     private final FacturaService facturaService;
+    private final BusquedaRucService busquedaRucService;
 
-    public ClienteController(ClienteService clienteService, FacturaService facturaService) {
+    public ClienteController(
+            ClienteService clienteService, FacturaService facturaService, BusquedaRucService busquedaRucService) {
         this.clienteService = clienteService;
         this.facturaService = facturaService;
+        this.busquedaRucService = busquedaRucService;
     }
 
     @GetMapping
@@ -50,6 +54,12 @@ public class ClienteController {
     @GetMapping("/validar-ruc")
     public ResultadoValidacionRuc validarRuc(@RequestParam String ruc) {
         return clienteService.validarRuc(ruc);
+    }
+
+    /** Alta de cliente / carga de factura: el cliente registrado o, si no lo hay, los datos del SIFEN. */
+    @GetMapping("/consulta-ruc")
+    public ConsultaRucClienteResponse consultarRuc(@RequestParam String ruc) {
+        return busquedaRucService.buscar(ruc);
     }
 
     @PostMapping

@@ -1,16 +1,20 @@
-import { Download, FileCode2, Mail, Plus, RotateCcw, X } from "lucide-react";
+import { Download, FileCode2, FileMinus2, Mail, Plus, RotateCcw, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { extraerMensajeError } from "../../api/client";
 import {
   CONDICION_PAGO_LABEL,
   ESTADO_DTE_LABEL,
+  MOTIVO_NOTA_LABEL,
   TASA_IVA_LABEL,
+  TIPO_DOCUMENTO_LABEL,
   type CondicionPago,
   type EstadoDte,
+  type Factura,
   type TasaIva,
 } from "../../api/types";
 import { clientesApi } from "../clientes/api";
+import { BuscarClientePorRuc } from "../clientes/BuscarClientePorRuc";
 import type { Cliente, Establecimiento } from "../../api/types";
 import { productosApi } from "../catalogo/api";
 import type { Producto } from "../../api/types";
@@ -19,7 +23,7 @@ import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
 import { useToast } from "../../components/ui/ToastProvider";
-import { descargarArchivo, facturasApi, type FacturaInput, type ItemFacturaInput } from "./api";
+import { descargarArchivo, facturasApi, nombreArchivo, type FacturaInput, type ItemFacturaInput } from "./api";
 import { calcularTotales, subtotalItem } from "./totales";
 
 interface FilaItem extends ItemFacturaInput {
@@ -37,9 +41,10 @@ function nuevaFilaVacia(): FilaItem {
   };
 }
 
-function badgeTone(estado: EstadoDte): "ok" | "off" | "info" {
+function badgeTone(estado: EstadoDte): "ok" | "off" | "warn" | "info" {
   if (estado === "APROBADO") return "ok";
   if (estado === "RECHAZADO") return "off";
+  if (estado === "ANULADO") return "warn";
   return "info";
 }
 
@@ -71,6 +76,7 @@ export function FacturaFormPage() {
   const [puntoExpedicionTexto, setPuntoExpedicionTexto] = useState<string | null>(null);
   const [motivoRechazo, setMotivoRechazo] = useState<string | null>(null);
   const [emailEnviado, setEmailEnviado] = useState(false);
+  const [notas, setNotas] = useState<Factura[]>([]);
 
   const [cargando, setCargando] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -80,7 +86,7 @@ export function FacturaFormPage() {
 
   const esBorrador = estadoDte === null || estadoDte === "BORRADOR";
   const esRechazada = estadoDte === "RECHAZADO";
-  const puedeDescargar = estadoDte === "APROBADO" || estadoDte === "RECHAZADO";
+  const puedeDescargar = estadoDte === "APROBADO" || estadoDte === "RECHAZADO" || estadoDte === "ANULADO";
 
   useEffect(() => {
     (async () => {
@@ -102,6 +108,12 @@ export function FacturaFormPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /** Cliente encontrado o recién registrado desde la búsqueda por RUC: se suma al selector y se elige. */
+  function seleccionarCliente(cliente: Cliente) {
+    setClientes((prev) => (prev.some((c) => c.ruc === cliente.ruc) ? prev : [...prev, cliente]));
+    setClienteRuc(cliente.ruc);
+  }
+
   function onCambiarEstablecimiento(nuevoId: string) {
     setEstablecimientoId(nuevoId);
     const establecimiento = establecimientos.find((e) => e.id === nuevoId);
@@ -122,7 +134,7 @@ export function FacturaFormPage() {
     setPuntoExpedicionTexto(
       `${factura.puntoExpedicionCodigo}${factura.puntoExpedicionDescripcion ? " — " + factura.puntoExpedicionDescripcion : ""}`,
     );
-    setCondicionPago(factura.condicionPago);
+    setCondicionPago(factura.condicionPago ?? "CONTADO");
     setPlazoDias(factura.plazoDias ?? "");
     setCantidadCuotas(factura.cantidadCuotas ?? "");
     setMotivoRechazo(factura.motivoRechazo);
@@ -144,9 +156,18 @@ export function FacturaFormPage() {
     setCargando(true);
     facturasApi
       .obtener(id)
-      .then(cargarDesdeFactura)
+      .then((factura) => {
+        // Las notas tienen su propia pantalla (ruta /notas/:id).
+        if (factura.tipoDocumento !== "FE") {
+          navigate(`/notas/${factura.id}`, { replace: true });
+          return;
+        }
+        cargarDesdeFactura(factura);
+        return facturasApi.notas(factura.id).then(setNotas);
+      })
       .catch((err) => setError(extraerMensajeError(err, "No se pudo cargar la factura")))
       .finally(() => setCargando(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   function agregarDesdeCatalogo() {
@@ -269,7 +290,7 @@ export function FacturaFormPage() {
     if (!facturaId) return;
     try {
       const blob = tipo === "pdf" ? await facturasApi.descargarPdf(facturaId) : await facturasApi.descargarXml(facturaId);
-      descargarArchivo(blob, `factura-${numero ?? facturaId}.${tipo}`);
+      descargarArchivo(blob, nombreArchivo({ id: facturaId, numero, tipoDocumento: "FE" }, tipo));
     } catch (err) {
       showToast(extraerMensajeError(err, `No se pudo descargar el ${tipo.toUpperCase()}`), "error");
     }
@@ -313,6 +334,51 @@ export function FacturaFormPage() {
         </div>
       )}
 
+      {facturaId && (estadoDte === "APROBADO" || estadoDte === "ANULADO" || notas.length > 0) && (
+        <div className="mb-4 rounded-lg border border-borde bg-white p-5 pt-4">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="m-0 text-base font-semibold text-azul-oscuro">Notas de crédito / débito</h2>
+            {estadoDte === "APROBADO" && (
+              <Button
+                variant="secondary"
+                icon={<FileMinus2 size={16} />}
+                onClick={() => navigate(`/notas/nueva?factura=${facturaId}`)}
+              >
+                Emitir nota
+              </Button>
+            )}
+          </div>
+          {estadoDte === "ANULADO" && (
+            <p className="mb-2 text-sm text-texto-suave">
+              La factura quedó anulada: sus notas de crédito aprobadas acreditan el total.
+            </p>
+          )}
+          {notas.length === 0 ? (
+            <p className="m-0 text-sm text-texto-suave">Esta factura no tiene notas emitidas.</p>
+          ) : (
+            <ul className="m-0 list-none p-0 text-sm">
+              {notas.map((n) => (
+                <li key={n.id} className="flex flex-wrap items-center gap-2 border-b border-borde py-1.5 last:border-0">
+                  <button
+                    type="button"
+                    className="font-semibold text-azul underline-offset-2 hover:underline"
+                    onClick={() => navigate(`/notas/${n.id}`)}
+                  >
+                    {TIPO_DOCUMENTO_LABEL[n.tipoDocumento]} {n.numero ?? "(borrador)"}
+                  </button>
+                  <span className="text-texto-suave">{n.motivoEmision ? MOTIVO_NOTA_LABEL[n.motivoEmision] : ""}</span>
+                  <span>
+                    {n.tipoDocumento === "NC" ? "−" : "+"}
+                    {n.totalGeneral.toLocaleString("es-PY")}
+                  </span>
+                  <Badge tone={badgeTone(n.estadoDte)}>{ESTADO_DTE_LABEL[n.estadoDte]}</Badge>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {puedeDescargar && (
         <div className="mb-4 flex gap-2">
           <Button variant="secondary" icon={<Download size={16} />} onClick={() => descargar("pdf")}>
@@ -328,6 +394,7 @@ export function FacturaFormPage() {
 
       <fieldset disabled={!esBorrador} className={sectionClass}>
         <legend className="px-1.5 font-semibold text-azul-oscuro">1. Datos del cliente y punto de emisión</legend>
+        {esBorrador && <BuscarClientePorRuc onClienteListo={seleccionarCliente} />}
         <label className="mb-1 block text-sm font-semibold text-texto-suave">Cliente</label>
         <select value={clienteRuc} onChange={(e) => setClienteRuc(e.target.value)}>
           <option value="">Seleccionar cliente…</option>

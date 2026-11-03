@@ -5,6 +5,7 @@ import com.tottalstore.sifen.dashboard.dto.ResumenDashboardResponse.RechazoResum
 import com.tottalstore.sifen.facturacion.EstadoDte;
 import com.tottalstore.sifen.facturacion.FacturaElectronica;
 import com.tottalstore.sifen.facturacion.FacturaRepository;
+import com.tottalstore.sifen.facturacion.TipoDocumento;
 import java.math.BigDecimal;
 import java.time.YearMonth;
 import java.time.ZoneId;
@@ -42,9 +43,10 @@ public class DashboardService {
                         f.getFechaEmision().atZone(ZoneId.systemDefault()).toLocalDate())))
                 .toList();
 
+        // Neto, como en el Libro IVA: las notas de crédito restan y la factura que anulan sigue sumando.
         BigDecimal totalFacturadoMes = facturasDelMes.stream()
-                .filter(f -> f.getEstadoDte() == EstadoDte.APROBADO)
-                .map(FacturaElectronica::getTotalGeneral)
+                .filter(f -> f.getEstadoDte() == EstadoDte.APROBADO || f.getEstadoDte() == EstadoDte.ANULADO)
+                .map(f -> f.getTipoDoc() == TipoDocumento.NC ? f.getTotalGeneral().negate() : f.getTotalGeneral())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         List<RechazoResumen> ultimosRechazados = facturas.stream()

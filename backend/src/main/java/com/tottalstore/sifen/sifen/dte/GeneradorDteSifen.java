@@ -78,7 +78,7 @@ public class GeneradorDteSifen implements GeneradorDteService {
         LocalDateTime fechaFirma = LocalDateTime.ofInstant(ahora, ZONA_PARAGUAY).withNano(0);
         String codigoSeguridad = generarCodigoSeguridad();
         String cdc = cdcGenerator.generar(new CdcGenerator.CdcDatos(
-                "01",
+                factura.getTipoDoc().codigoCdc(),
                 emisor.getRucBase(),
                 emisor.getDvRuc(),
                 factura.getEstablecimiento().getCodigo(),

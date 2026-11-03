@@ -308,6 +308,174 @@ class FacturaServiceTest {
                 .isInstanceOf(BusinessException.class);
     }
 
+    // --- M6: notas de crédito/débito ----------------------------------------------------------
+
+    @Test
+    void crearNotaDeCreditoTomaClienteYPuntoDeExpedicionDeLaFacturaAsociada() {
+        FacturaElectronica factura = facturaAprobada("100000");
+        when(facturaRepository.findById(factura.getId())).thenReturn(java.util.Optional.of(factura));
+        when(facturaRepository.findByFacturaAsociadaIdOrderByFechaEmisionAsc(factura.getId())).thenReturn(List.of());
+        when(facturaRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(currentUser.obtener()).thenReturn(mock(Usuario.class));
+
+        FacturaElectronica nota = facturaService.crearNota(notaRequest(factura, TipoDocumento.NC, "60000"));
+
+        assertThat(nota.getTipoDoc()).isEqualTo(TipoDocumento.NC);
+        assertThat(nota.getEstadoDte()).isEqualTo(EstadoDte.BORRADOR);
+        assertThat(nota.getFacturaAsociada()).isSameAs(factura);
+        assertThat(nota.getMotivoEmision()).isEqualTo(MotivoNota.DEVOLUCION);
+        assertThat(nota.getCliente()).isSameAs(factura.getCliente());
+        assertThat(nota.getPuntoExpedicion()).isSameAs(factura.getPuntoExpedicion());
+        assertThat(nota.getCondicionPago()).isNull();
+        assertThat(nota.getTotalGeneral()).isEqualByComparingTo("60000");
+    }
+
+    @Test
+    void noPermiteNotasDeCreditoQueJuntasSuperenElTotalDeLaFactura() {
+        // Rechazo 2417 del SIFEN, validado antes de enviar. La nota rechazada no cuenta.
+        FacturaElectronica factura = facturaAprobada("100000");
+        FacturaElectronica previa = notaExistente(factura, EstadoDte.APROBADO, "70000");
+        FacturaElectronica rechazada = notaExistente(factura, EstadoDte.RECHAZADO, "90000");
+        when(facturaRepository.findById(factura.getId())).thenReturn(java.util.Optional.of(factura));
+        when(facturaRepository.findByFacturaAsociadaIdOrderByFechaEmisionAsc(factura.getId()))
+                .thenReturn(List.of(previa, rechazada));
+        when(currentUser.obtener()).thenReturn(mock(Usuario.class));
+
+        assertThatThrownBy(() -> facturaService.crearNota(notaRequest(factura, TipoDocumento.NC, "40000")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("saldo acreditable de la factura (30000)");
+    }
+
+    @Test
+    void laNotaDeDebitoNoEstaLimitadaPorElTotalDeLaFactura() {
+        FacturaElectronica factura = facturaAprobada("100000");
+        when(facturaRepository.findById(factura.getId())).thenReturn(java.util.Optional.of(factura));
+        when(facturaRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(currentUser.obtener()).thenReturn(mock(Usuario.class));
+
+        FacturaElectronica nota = facturaService.crearNota(notaRequest(factura, TipoDocumento.ND, "250000"));
+
+        assertThat(nota.getTipoDoc()).isEqualTo(TipoDocumento.ND);
+        assertThat(nota.getTotalGeneral()).isEqualByComparingTo("250000");
+    }
+
+    @Test
+    void noPermiteNotasSobreFacturasNoAprobadas() {
+        FacturaElectronica factura = facturaAprobada("100000");
+        factura.setEstadoDte(EstadoDte.RECHAZADO);
+        when(facturaRepository.findById(factura.getId())).thenReturn(java.util.Optional.of(factura));
+
+        assertThatThrownBy(() -> facturaService.crearNota(notaRequest(factura, TipoDocumento.NC, "1000")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("aprobadas por el SIFEN");
+    }
+
+    @Test
+    void noPermiteCrearUnaNotaConTipoFactura() {
+        FacturaElectronica factura = facturaAprobada("100000");
+
+        assertThatThrownBy(() -> facturaService.crearNota(notaRequest(factura, TipoDocumento.FE, "1000")))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void confirmarUnaNotaDeCreditoPorElTotalAnulaLaFacturaYUsaLaNumeracionDeNotas() {
+        FacturaElectronica factura = facturaAprobada("100000");
+        com.tottalstore.sifen.establecimientos.PuntoExpedicion punto = factura.getPuntoExpedicion();
+        punto.setUltimoNumeroDocumento(41);
+        punto.setUltimoNumeroNc(3);
+        FacturaElectronica nota = notaExistente(factura, EstadoDte.BORRADOR, "100000");
+
+        when(facturaRepository.findById(nota.getId())).thenReturn(java.util.Optional.of(nota));
+        when(facturaRepository.findByFacturaAsociadaIdOrderByFechaEmisionAsc(factura.getId())).thenReturn(List.of(nota));
+        when(puntoExpedicionRepository.findByIdParaNumerar(punto.getId())).thenReturn(java.util.Optional.of(punto));
+        when(generadorDteService.generar(any(), any()))
+                .thenReturn(new DteFirmado("<rDE/>", Instant.now(), "05" + "0".repeat(42), "123456789"));
+        when(enviadorSifenService.enviar(any(), any(), any()))
+                .thenReturn(new RespuestaSifenResult(true, "0260", "Aprobado", null));
+        when(enviadorSifenConfigRepository.findAll()).thenReturn(List.of());
+        when(facturaRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(currentUser.obtener()).thenReturn(mock(Usuario.class));
+
+        FacturaElectronica resultado = facturaService.confirmarEnvio(nota.getId());
+
+        assertThat(resultado.getEstadoDte()).isEqualTo(EstadoDte.APROBADO);
+        assertThat(resultado.getNumeroDocumento()).isEqualTo(4);
+        assertThat(punto.getUltimoNumeroNc()).isEqualTo(4);
+        assertThat(punto.getUltimoNumeroDocumento()).isEqualTo(41);
+        assertThat(factura.getEstadoDte()).isEqualTo(EstadoDte.ANULADO);
+        verify(auditoriaService).registrar(org.mockito.ArgumentMatchers.eq("ANULADO_POR_NC"), any(), any());
+    }
+
+    @Test
+    void unaNotaDeCreditoParcialNoAnulaLaFactura() {
+        FacturaElectronica factura = facturaAprobada("100000");
+        FacturaElectronica nota = notaExistente(factura, EstadoDte.BORRADOR, "30000");
+        nota.setNumeroDocumento(1);
+
+        when(facturaRepository.findById(nota.getId())).thenReturn(java.util.Optional.of(nota));
+        when(facturaRepository.findByFacturaAsociadaIdOrderByFechaEmisionAsc(factura.getId())).thenReturn(List.of(nota));
+        when(generadorDteService.generar(any(), any())).thenReturn(new DteFirmado("<rDE/>", Instant.now()));
+        when(enviadorSifenService.enviar(any(), any(), any()))
+                .thenReturn(new RespuestaSifenResult(true, "0260", "Aprobado", null));
+        when(enviadorSifenConfigRepository.findAll()).thenReturn(List.of());
+        when(facturaRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(currentUser.obtener()).thenReturn(mock(Usuario.class));
+
+        facturaService.confirmarEnvio(nota.getId());
+
+        assertThat(factura.getEstadoDte()).isEqualTo(EstadoDte.APROBADO);
+    }
+
+    @Test
+    void elEndpointDeFacturasNoEditaNotas() {
+        FacturaElectronica nota = notaExistente(facturaAprobada("100000"), EstadoDte.BORRADOR, "1000");
+        when(facturaRepository.findById(nota.getId())).thenReturn(java.util.Optional.of(nota));
+
+        assertThatThrownBy(() -> facturaService.editarBorrador(nota.getId(), null))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    private FacturaElectronica facturaAprobada(String total) {
+        com.tottalstore.sifen.establecimientos.Establecimiento establecimiento = establecimientoConPunto();
+        FacturaElectronica factura = new FacturaElectronica();
+        factura.setId(UUID.randomUUID());
+        factura.setEstadoDte(EstadoDte.APROBADO);
+        factura.setCdc("01" + "1".repeat(42));
+        factura.setCliente(clienteActivo());
+        factura.setEstablecimiento(establecimiento);
+        factura.setPuntoExpedicion(establecimiento.getPuntosExpedicion().get(0));
+        factura.setCondicionPago(CondicionPago.CONTADO);
+        factura.getItems().add(item(1, total, TasaIva.DIEZ));
+        FacturaService.calcularTotales(factura);
+        return factura;
+    }
+
+    private FacturaElectronica notaExistente(FacturaElectronica factura, EstadoDte estado, String total) {
+        FacturaElectronica nota = new FacturaElectronica();
+        nota.setId(UUID.randomUUID());
+        nota.setTipoDoc(TipoDocumento.NC);
+        nota.setEstadoDte(estado);
+        nota.setMotivoEmision(MotivoNota.DEVOLUCION);
+        nota.setFacturaAsociada(factura);
+        nota.setCliente(factura.getCliente());
+        nota.setEstablecimiento(factura.getEstablecimiento());
+        nota.setPuntoExpedicion(factura.getPuntoExpedicion());
+        nota.getItems().add(item(1, total, TasaIva.DIEZ));
+        FacturaService.calcularTotales(nota);
+        return nota;
+    }
+
+    private com.tottalstore.sifen.facturacion.dto.NotaRequest notaRequest(
+            FacturaElectronica factura, TipoDocumento tipo, String total) {
+        return new com.tottalstore.sifen.facturacion.dto.NotaRequest(
+                factura.getId(),
+                tipo,
+                MotivoNota.DEVOLUCION,
+                List.of(new com.tottalstore.sifen.facturacion.dto.ItemFacturaRequest(
+                        null, "Devolución de ítem", 1, new BigDecimal(total), TasaIva.DIEZ)));
+    }
+
     private com.tottalstore.sifen.establecimientos.Establecimiento establecimientoConPunto() {
         com.tottalstore.sifen.establecimientos.Establecimiento establecimiento =
                 new com.tottalstore.sifen.establecimientos.Establecimiento();

@@ -1,5 +1,5 @@
-import { Plus } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { Plus, Search } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { extraerMensajeError } from "../../api/client";
 import { CONDICION_IVA_LABEL, type Cliente, type CondicionIva } from "../../api/types";
 import { useAuth } from "../../auth/AuthContext";
@@ -12,6 +12,7 @@ import { Modal } from "../../components/ui/Modal";
 import { useToast } from "../../components/ui/ToastProvider";
 import { HistorialClienteModal } from "../reportes/HistorialClienteModal";
 import { clientesApi, type ClienteInput } from "./api";
+import { mensajeConsulta, TONO_RUC_CLASE, type TonoRuc } from "./consultaRuc";
 
 const FORM_VACIO: ClienteInput = {
   ruc: "",
@@ -35,11 +36,12 @@ export function ClientesPage() {
   const [editandoRuc, setEditandoRuc] = useState<string | null>(null);
   const [form, setForm] = useState<ClienteInput>(FORM_VACIO);
   const [errorFormulario, setErrorFormulario] = useState<string | null>(null);
-  const [estadoRuc, setEstadoRuc] = useState<{ validando: boolean; mensaje: string | null; valido: boolean }>({
+  const [estadoRuc, setEstadoRuc] = useState<{ validando: boolean; mensaje: string | null; tono: TonoRuc }>({
     validando: false,
     mensaje: null,
-    valido: true,
+    tono: "ok",
   });
+  const ultimoRucConsultado = useRef<string | null>(null);
   const [mostrarInactivos, setMostrarInactivos] = useState(false);
   const [historialRuc, setHistorialRuc] = useState<string | null>(null);
 
@@ -64,7 +66,8 @@ export function ClientesPage() {
     setEditandoRuc(null);
     setForm(FORM_VACIO);
     setErrorFormulario(null);
-    setEstadoRuc({ validando: false, mensaje: null, valido: true });
+    setEstadoRuc({ validando: false, mensaje: null, tono: "ok" });
+    ultimoRucConsultado.current = null;
     setMostrarFormulario(true);
   }
 
@@ -78,22 +81,34 @@ export function ClientesPage() {
       condicionIva: cliente.condicionIva,
     });
     setErrorFormulario(null);
-    setEstadoRuc({ validando: false, mensaje: null, valido: true });
+    setEstadoRuc({ validando: false, mensaje: null, tono: "ok" });
     setMostrarFormulario(true);
   }
 
-  async function onValidarRuc() {
-    if (editandoRuc || !form.ruc.trim()) return;
-    setEstadoRuc({ validando: true, mensaje: null, valido: true });
+  /** Valida el RUC y, si el cliente no está registrado, precarga los datos que devuelve el SIFEN. */
+  async function onConsultarRuc() {
+    // El botón dispara también el blur del campo: no consultar dos veces el mismo RUC.
+    if (editandoRuc || !form.ruc.trim() || form.ruc.trim() === ultimoRucConsultado.current) return;
+    ultimoRucConsultado.current = form.ruc.trim();
+    setEstadoRuc({ validando: true, mensaje: null, tono: "ok" });
     try {
-      const resultado = await clientesApi.validarRuc(form.ruc.trim());
-      setEstadoRuc({ validando: false, mensaje: resultado.mensaje, valido: resultado.valido });
+      const r = await clientesApi.consultarRuc(form.ruc.trim());
+      if (r.cliente) {
+        setForm((f) => ({ ...f, ruc: r.ruc }));
+        setEstadoRuc({ validando: false, mensaje: `Ya existe un cliente con el RUC ${r.ruc}: ${r.cliente.razonSocial}`, tono: "error" });
+        return;
+      }
+      ultimoRucConsultado.current = r.ruc;
+      setForm((f) => ({
+        ...f,
+        ruc: r.ruc,
+        razonSocial: r.razonSocial ?? f.razonSocial,
+        condicionIva: r.condicionIvaSugerida ?? f.condicionIva,
+      }));
+      setEstadoRuc({ validando: false, mensaje: mensajeConsulta(r), tono: r.existeEnSifen ? "ok" : "aviso" });
     } catch (err) {
-      setEstadoRuc({
-        validando: false,
-        mensaje: extraerMensajeError(err, "No se pudo validar el RUC"),
-        valido: false,
-      });
+      ultimoRucConsultado.current = null;
+      setEstadoRuc({ validando: false, mensaje: extraerMensajeError(err, "No se pudo validar el RUC"), tono: "error" });
     }
   }
 
@@ -164,11 +179,9 @@ export function ClientesPage() {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h1 className="m-0 text-xl font-semibold">Gestión de clientes</h1>
-        {esAdmin && (
-          <Button icon={<Plus size={16} />} onClick={abrirNuevo}>
-            Nuevo cliente
-          </Button>
-        )}
+        <Button icon={<Plus size={16} />} onClick={abrirNuevo}>
+          Nuevo cliente
+        </Button>
       </div>
 
       <div className="mb-4 flex max-w-xl flex-wrap items-center gap-2">
@@ -214,19 +227,30 @@ export function ClientesPage() {
         >
           <form onSubmit={onSubmit}>
             <FormField label="RUC / CI">
-              <input
-                value={form.ruc}
-                disabled={!!editandoRuc}
-                onChange={(e) => setForm({ ...form, ruc: e.target.value })}
-                onBlur={onValidarRuc}
-                placeholder="80012345-0"
-                required
-              />
-              {estadoRuc.validando && <p className="mt-1 text-sm text-texto-suave">Validando RUC…</p>}
+              <div className="flex gap-2">
+                <input
+                  value={form.ruc}
+                  disabled={!!editandoRuc}
+                  onChange={(e) => setForm({ ...form, ruc: e.target.value })}
+                  onBlur={onConsultarRuc}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      onConsultarRuc();
+                    }
+                  }}
+                  placeholder="80012345 o 80012345-6"
+                  required
+                />
+                {!editandoRuc && (
+                  <Button type="button" variant="secondary" icon={<Search size={16} />} onClick={onConsultarRuc}>
+                    SIFEN
+                  </Button>
+                )}
+              </div>
+              {estadoRuc.validando && <p className="mt-1 text-sm text-texto-suave">Consultando RUC en el SIFEN…</p>}
               {!estadoRuc.validando && estadoRuc.mensaje && (
-                <p className={`mt-1 text-sm ${estadoRuc.valido ? "text-verde" : "text-rojo"}`}>
-                  {estadoRuc.mensaje}
-                </p>
+                <p className={`mt-1 text-sm ${TONO_RUC_CLASE[estadoRuc.tono]}`}>{estadoRuc.mensaje}</p>
               )}
             </FormField>
 

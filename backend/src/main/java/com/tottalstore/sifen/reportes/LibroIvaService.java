@@ -7,6 +7,7 @@ import com.tottalstore.sifen.facturacion.EstadoDte;
 import com.tottalstore.sifen.facturacion.FacturaElectronica;
 import com.tottalstore.sifen.facturacion.FacturaRepository;
 import com.tottalstore.sifen.facturacion.ItemFactura;
+import com.tottalstore.sifen.facturacion.TipoDocumento;
 import com.tottalstore.sifen.reportes.dto.LibroIvaResponse;
 import com.tottalstore.sifen.reportes.dto.LibroIvaResponse.Renglon;
 import com.tottalstore.sifen.reportes.dto.LibroIvaResponse.Totales;
@@ -20,17 +21,15 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 /**
- * Libro IVA Ventas mensual (M4, Release 3), armado a partir de las facturas aprobadas por el SIFEN.
- * Las ANULADAS también se listan: la anulación se hace con una nota de crédito (M6), que es la que
- * debe restar, no la desaparición de la factura original.
+ * Libro IVA Ventas mensual (M4, Release 3), armado a partir de los DE aprobados por el SIFEN:
+ * facturas y notas de crédito/débito (M6). Las facturas ANULADAS también se listan: la anulación se
+ * hace con una nota de crédito, que es la que resta, no la desaparición de la factura original.
  */
 @Service
 public class LibroIvaService {
 
     /** Huso de la fecha de emisión del DE (igual que GeneradorDteSifen): define a qué mes pertenece. */
     static final ZoneId ZONA = ZoneId.of("America/Asuncion");
-
-    private static final String TIPO_FACTURA = "Factura electrónica";
 
     private final FacturaRepository facturaRepository;
     private final ConfiguracionEmisorService configuracionEmisorService;
@@ -56,28 +55,40 @@ public class LibroIvaService {
                 periodo.toString(), rucEmisor(emisor), emisor.getRazonSocial(), renglones, totales(renglones));
     }
 
+    /** Las notas de crédito van con montos negativos: restan del débito fiscal del mes en que se
+     * emiten, aunque la factura que ajustan sea de otro mes. Las de débito suman como una factura. */
     static Renglon renglon(FacturaElectronica factura, String timbrado) {
+        BigDecimal signo = factura.getTipoDoc() == TipoDocumento.NC ? BigDecimal.ONE.negate() : BigDecimal.ONE;
         BigDecimal gravado10 = sumarItems(factura, TasaIva.DIEZ);
         BigDecimal gravado5 = sumarItems(factura, TasaIva.CINCO);
         BigDecimal exento = sumarItems(factura, TasaIva.EXENTA);
         return new Renglon(
                 factura.getId(),
                 factura.getFechaEmision().atZone(ZONA).toLocalDate(),
-                TIPO_FACTURA,
+                factura.getTipoDoc().descripcion(),
                 numeroComprobante(factura),
                 timbrado,
-                factura.getCdc(),
+                factura.cdcVigente(),
                 factura.getCliente().getRuc(),
                 factura.getCliente().getRazonSocial(),
-                factura.getCondicionPago() == CondicionPago.CREDITO ? "Crédito" : "Contado",
-                gravado10,
+                condicion(factura),
+                gravado10.multiply(signo),
                 // Se reutiliza el IVA ya calculado por ítem al confirmar, para que el libro coincida
                 // centavo a centavo con lo informado al SIFEN en cada DE.
-                factura.getTotalIva10(),
-                gravado5,
-                factura.getTotalIva5(),
-                exento,
-                factura.getTotalGeneral());
+                factura.getTotalIva10().multiply(signo),
+                gravado5.multiply(signo),
+                factura.getTotalIva5().multiply(signo),
+                exento.multiply(signo),
+                factura.getTotalGeneral().multiply(signo));
+    }
+
+    private static String condicion(FacturaElectronica factura) {
+        if (factura.esNota()) {
+            String asociada = factura.getFacturaAsociada() != null
+                    ? factura.getFacturaAsociada().numeroComprobante() : null;
+            return asociada != null ? "Ajusta " + asociada : "-";
+        }
+        return factura.getCondicionPago() == CondicionPago.CREDITO ? "Crédito" : "Contado";
     }
 
     static Totales totales(List<Renglon> renglones) {

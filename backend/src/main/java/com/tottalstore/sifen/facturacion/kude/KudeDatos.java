@@ -30,6 +30,9 @@ public record KudeDatos(
         String detalleCredito,
         String moneda,
         String tipoTransaccion,
+        // Nota de crédito/débito (E402, H004): null en facturas
+        String motivoEmision,
+        String cdcDocumentoAsociado,
         // Receptor (D2)
         String receptorDocumento,
         String receptorNombre,
@@ -68,6 +71,14 @@ public record KudeDatos(
 
     /** CDC en once grupos de cuatro posiciones, como pide el manual para el KuDE. */
     public String cdcAgrupado() {
+        return agrupar(cdc);
+    }
+
+    public String cdcAgrupadoAsociado() {
+        return agrupar(cdcDocumentoAsociado);
+    }
+
+    private static String agrupar(String cdc) {
         if (cdc == null) {
             return null;
         }

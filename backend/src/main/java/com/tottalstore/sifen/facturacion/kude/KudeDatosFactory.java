@@ -87,6 +87,8 @@ public final class KudeDatosFactory {
                 plazo != null ? "Plazo: " + plazo : cuotas != null ? "Cuotas: " + cuotas : null,
                 texto(de, "dDesMoneOpe"),
                 texto(de, "dDesTipTra"),
+                texto(de, "dDesMotEmi"),
+                texto(de, "dCdCDERef"),
                 receptorDoc,
                 texto(de, "dNomRec"),
                 unir(texto(de, "dDirRec"), texto(de, "dNumCasRec")),
@@ -143,8 +145,9 @@ public final class KudeDatosFactory {
         String cdc = f.getCdc() != null ? f.getCdc()
                 : f.getRespuestaSifen() != null ? f.getRespuestaSifen().getCdc() : null;
 
+        boolean nota = f.esNota();
         return new KudeDatos(
-                "Factura electrónica",
+                f.getTipoDoc().descripcion(),
                 e.getRazonSocial(),
                 e.getNombreFantasia(),
                 ruc,
@@ -158,10 +161,12 @@ public final class KudeDatosFactory {
                 e.getTimbradoFechaFin() != null ? FECHA.format(e.getTimbradoFechaFin()) : null,
                 f.numeroComprobante(),
                 f.getFechaEmision() != null ? FECHA_HORA.format(f.getFechaEmision().atZone(ZONA)) : null,
-                credito ? "Crédito" : "Contado",
+                nota ? null : credito ? "Crédito" : "Contado",
                 credito && f.getPlazoDias() != null ? "Plazo: " + f.getPlazoDias() + " días" : null,
                 "Guarani",
-                "Venta de mercadería",
+                nota ? null : "Venta de mercadería",
+                nota && f.getMotivoEmision() != null ? f.getMotivoEmision().descripcion() : null,
+                nota && f.getFacturaAsociada() != null ? f.getFacturaAsociada().cdcVigente() : null,
                 f.getCliente().getRuc(),
                 f.getCliente().getRazonSocial(),
                 f.getCliente().getDireccion(),

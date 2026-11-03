@@ -23,6 +23,14 @@ if (Test-Path $envFile) {
     Write-Host "(Para modo real: copiá .env.example a .env y completá los valores)"
 }
 
+# RNF-03: los secretos del .env pueden venir cifrados como ENC(...). La clave maestra no está en el
+# .env sino en la variable de entorno de usuario SIFEN_MASTER_KEY; se lee del registro por si esta
+# terminal se abrió antes de definirla.
+if (-not $env:SIFEN_MASTER_KEY) {
+    $claveMaestra = [Environment]::GetEnvironmentVariable("SIFEN_MASTER_KEY", "User")
+    if ($claveMaestra) { $env:SIFEN_MASTER_KEY = $claveMaestra }
+}
+
 Push-Location $PSScriptRoot
 try {
     mvn spring-boot:run

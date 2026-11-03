@@ -153,9 +153,17 @@ public class FacturaPdfGenerator {
     private void datosOperacion(Lienzo l, KudeDatos d) throws IOException {
         List<String[]> izq = new ArrayList<>();
         izq.add(new String[] {"Fecha y hora de emisión: ", d.fechaEmision()});
-        izq.add(new String[] {"Condición de venta: ", unirConSeparador(d.condicion(), d.detalleCredito())});
+        // Las notas no informan condición (E7) ni tipo de transacción (D011): llevan el motivo (E402).
+        if (d.condicion() != null) {
+            izq.add(new String[] {"Condición de venta: ", unirConSeparador(d.condicion(), d.detalleCredito())});
+        }
         izq.add(new String[] {"Moneda: ", d.moneda()});
-        izq.add(new String[] {"Tipo de transacción: ", d.tipoTransaccion()});
+        if (d.tipoTransaccion() != null) {
+            izq.add(new String[] {"Tipo de transacción: ", d.tipoTransaccion()});
+        }
+        if (d.motivoEmision() != null) {
+            izq.add(new String[] {"Motivo de emisión: ", d.motivoEmision()});
+        }
         List<String[]> der = new ArrayList<>();
         der.add(new String[] {"RUC/Documento de identidad N°: ", d.receptorDocumento()});
         der.add(new String[] {"Nombre o razón social: ", d.receptorNombre()});
@@ -170,12 +178,23 @@ public class FacturaPdfGenerator {
         }
 
         int filas = Math.max(izq.size(), der.size());
-        float alto = filas * 12 + 12;
+        // El CDC de la factura asociada (H004) no entra en una columna: va en un renglón a todo lo ancho.
+        boolean conAsociado = d.cdcDocumentoAsociado() != null;
+        float alto = filas * 12 + 12 + (conAsociado ? 14 : 0);
         float top = l.y;
         float division = MARGEN + ANCHO * 0.42f;
         rect(l.cs, MARGEN, top - alto, ANCHO, alto);
         etiquetas(l.cs, izq, MARGEN + 8, top - 14, division - MARGEN - 12);
         etiquetas(l.cs, der, division, top - 14, X_FIN - division - 8);
+        if (conAsociado) {
+            float y = top - 14 - filas * 12 - 2;
+            l.cs.setStrokingColor(GRIS);
+            linea(l.cs, MARGEN, y + 9, X_FIN, y + 9);
+            l.cs.setStrokingColor(Color.BLACK);
+            List<String[]> asociado = new ArrayList<>();
+            asociado.add(new String[] {"Documento asociado: ", "Factura electrónica · CDC " + d.cdcAgrupadoAsociado()});
+            etiquetas(l.cs, asociado, MARGEN + 8, y, ANCHO - 16);
+        }
         l.y = top - alto - 10;
     }
 
