@@ -1,4 +1,4 @@
-import { Download, FileCode2, FileMinus2, Mail, Plus, RotateCcw } from "lucide-react";
+import { Download, FileCode2, FileMinus2, Mail, Plus, RotateCcw, SearchCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { extraerMensajeError } from "../../api/client";
@@ -16,11 +16,12 @@ import { useConfirm } from "../../components/ui/ConfirmProvider";
 import { type Column, DataTable } from "../../components/ui/DataTable";
 import { useToast } from "../../components/ui/ToastProvider";
 import { descargarArchivo, facturasApi, nombreArchivo } from "./api";
+import { resultadoEnvio } from "./VerificarEnvioAviso";
 
 function badgeTone(estado: EstadoDte): "ok" | "off" | "warn" | "info" {
   if (estado === "APROBADO") return "ok";
   if (estado === "RECHAZADO") return "off";
-  if (estado === "ANULADO") return "warn";
+  if (estado === "ANULADO" || estado === "EN_PROCESO") return "warn";
   return "info";
 }
 
@@ -63,6 +64,16 @@ export function FacturasPage() {
       navigate(rutaDocumento(f));
     } catch (err) {
       showToast(extraerMensajeError(err, "No se pudo reabrir el documento"), "error");
+    }
+  }
+
+  async function onVerificar(f: Factura) {
+    try {
+      const [mensaje, tipo] = resultadoEnvio(await facturasApi.verificar(f.id), "Documento");
+      showToast(mensaje, tipo);
+      cargar(filtroEstado, filtroTipo);
+    } catch (err) {
+      showToast(extraerMensajeError(err, "No se pudo verificar el documento en el SIFEN"), "error");
     }
   }
 
@@ -124,7 +135,7 @@ export function FacturasPage() {
               <Mail size={12} /> Enviado
             </span>
           )}
-          {f.estadoDte === "RECHAZADO" && f.motivoRechazo && (
+          {(f.estadoDte === "RECHAZADO" || f.estadoDte === "EN_PROCESO") && f.motivoRechazo && (
             <div className="mt-1 text-xs text-texto-suave">{f.motivoRechazo}</div>
           )}
         </div>
@@ -150,6 +161,11 @@ export function FacturasPage() {
           {f.estadoDte === "RECHAZADO" && (
             <Button variant="link" icon={<RotateCcw size={14} />} onClick={() => onReabrir(f)}>
               Reabrir
+            </Button>
+          )}
+          {f.estadoDte === "EN_PROCESO" && (
+            <Button variant="link" icon={<SearchCheck size={14} />} onClick={() => onVerificar(f)}>
+              Verificar
             </Button>
           )}
           {(f.estadoDte === "APROBADO" || f.estadoDte === "RECHAZADO" || f.estadoDte === "ANULADO") && (

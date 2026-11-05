@@ -1,11 +1,17 @@
 package com.tottalstore.sifen.configuracion;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -99,4 +105,27 @@ public class ConfiguracionEmisor {
 
     @Column(name = "updated_at")
     private Instant updatedAt = Instant.now();
+
+    /** D2.1: todas las actividades (hasta 9), la principal primero. */
+    @OneToMany(mappedBy = "configuracion", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @OrderBy("principal DESC, orden ASC")
+    private List<ActividadEconomicaEmisor> actividadesEconomicas = new ArrayList<>();
+
+    /**
+     * Actividades para el DE y la pantalla: la principal primero. Si la tabla todavía no tiene filas
+     * (emisor configurado antes de V9 o armado en un test), la actividad suelta de las columnas.
+     */
+    public List<ActividadEconomicaEmisor> actividadesOrdenadas() {
+        if (actividadesEconomicas.isEmpty()) {
+            if (actividadEconomicaCodigo == null || actividadEconomicaCodigo.isBlank()) {
+                return List.of();
+            }
+            return List.of(new ActividadEconomicaEmisor(
+                    this, actividadEconomicaCodigo, actividadEconomicaDescripcion, true, 0));
+        }
+        return actividadesEconomicas.stream()
+                .sorted(java.util.Comparator.comparing(ActividadEconomicaEmisor::isPrincipal).reversed()
+                        .thenComparingInt(ActividadEconomicaEmisor::getOrden))
+                .toList();
+    }
 }

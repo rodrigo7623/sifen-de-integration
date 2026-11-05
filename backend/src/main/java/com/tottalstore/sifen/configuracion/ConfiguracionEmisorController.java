@@ -4,6 +4,7 @@ import com.tottalstore.sifen.configuracion.dto.ConfiguracionEmisorRequest;
 import com.tottalstore.sifen.configuracion.dto.ConfiguracionEmisorResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,7 +26,7 @@ public class ConfiguracionEmisorController {
     }
 
     @PutMapping
-    public ConfiguracionEmisorResponse actualizar(@RequestBody ConfiguracionEmisorRequest request) {
+    public ConfiguracionEmisorResponse actualizar(@Valid @RequestBody ConfiguracionEmisorRequest request) {
         return ConfiguracionEmisorResponse.from(service.actualizar(request));
     }
 }

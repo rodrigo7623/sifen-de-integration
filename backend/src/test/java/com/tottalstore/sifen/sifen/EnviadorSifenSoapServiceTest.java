@@ -18,6 +18,7 @@ class EnviadorSifenSoapServiceTest {
                 SSLContext.getDefault(),
                 mock(EnviadorSifenConfigRepository.class),
                 mock(SifenEnvioHistorial.class),
+                "https://sifen-test.set.gov.py/de/ws/consultas/consulta.wsdl",
                 30);
     }
 
@@ -92,5 +93,102 @@ class EnviadorSifenSoapServiceTest {
         assertThat(resultado.aprobado()).isTrue();
         assertThat(resultado.codigo()).isEqualTo("0260");
         assertThat(resultado.cdc()).isEqualTo(cdcEsperado);
+    }
+
+    // --- BUG-006: timeout sin confirmar y consulta por CDC (siConsDE) ---
+
+    @Test
+    void unTimeoutEsperandoLaRespuestaNoEsUnRechazoSinoUnEnvioSinConfirmar() throws Exception {
+        // Servidor local que acepta el envío y nunca contesta: el SIFEN pudo haber recibido el DE.
+        com.sun.net.httpserver.HttpServer servidor = com.sun.net.httpserver.HttpServer.create(
+                new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        java.util.concurrent.CountDownLatch liberar = new java.util.concurrent.CountDownLatch(1);
+        servidor.createContext("/", intercambio -> {
+            try {
+                liberar.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            intercambio.close();
+        });
+        servidor.start();
+        try {
+            RespuestaSifenResult resultado = servicioContra("http://127.0.0.1:" + servidor.getAddress().getPort() + "/de", 1)
+                    .enviar(java.util.UUID.randomUUID(), "<rDE/>", Ambiente.TEST);
+
+            assertThat(resultado.aprobado()).isFalse();
+            assertThat(resultado.sinConfirmar()).isTrue();
+            assertThat(resultado.codigo()).isEqualTo("ERROR_TIMEOUT");
+        } finally {
+            liberar.countDown();
+            servidor.stop(0);
+        }
+    }
+
+    @Test
+    void siNoSePudoConectarElDeNuncaSalioYEsUnRechazo() throws Exception {
+        int puertoCerrado;
+        try (java.net.ServerSocket socket = new java.net.ServerSocket(0)) {
+            puertoCerrado = socket.getLocalPort();
+        }
+
+        RespuestaSifenResult resultado = servicioContra("http://127.0.0.1:" + puertoCerrado + "/de", 5)
+                .enviar(java.util.UUID.randomUUID(), "<rDE/>", Ambiente.TEST);
+
+        assertThat(resultado.sinConfirmar()).isFalse();
+        assertThat(resultado.codigo()).isEqualTo("ERROR_CONEXION");
+    }
+
+    @Test
+    void construyeElSobreDeLaConsultaPorCdc() throws Exception {
+        String sobre = nuevoServicio().construirSobreConsultaDe("123", "01" + "4".repeat(42));
+
+        assertThat(sobre).contains("<rEnviConsDeRequest xmlns=\"http://ekuatia.set.gov.py/sifen/xsd\">");
+        assertThat(sobre).contains("<dId>123</dId>");
+        assertThat(sobre).contains("<dCDC>01" + "4".repeat(42) + "</dCDC>");
+    }
+
+    @Test
+    void laConsultaConCodigo0422SignificaQueElSifenTieneElDocumento() throws Exception {
+        String cdc = "01" + "4".repeat(42);
+        RespuestaSifenResult resultado = nuevoServicio().parsearConsultaDe(respuestaConsulta("0422", "CDC encontrado"), cdc);
+
+        assertThat(resultado.aprobado()).isTrue();
+        assertThat(resultado.cdc()).isEqualTo(cdc);
+    }
+
+    @Test
+    void laConsultaConCodigo0420SignificaQueElDocumentoNoExiste() throws Exception {
+        RespuestaSifenResult resultado = nuevoServicio().parsearConsultaDe(
+                respuestaConsulta("0420", "Documento No Existe en SIFEN o ha sido Rechazado"), "01" + "4".repeat(42));
+
+        assertThat(resultado.aprobado()).isFalse();
+        assertThat(resultado.sinConfirmar()).isFalse();
+    }
+
+    @Test
+    void otroCodigoDeLaConsultaNoPermiteConcluirNada() throws Exception {
+        RespuestaSifenResult resultado = nuevoServicio().parsearConsultaDe(
+                respuestaConsulta("0160", "XML Mal Formado."), "01" + "4".repeat(42));
+
+        assertThat(resultado.sinConfirmar()).isTrue();
+    }
+
+    private EnviadorSifenSoapService servicioContra(String url, long timeoutSegundos) throws Exception {
+        EnviadorSifenConfig config = new EnviadorSifenConfig();
+        config.setUrlEndpoint(url);
+        EnviadorSifenConfigRepository repositorio = mock(EnviadorSifenConfigRepository.class);
+        org.mockito.Mockito.when(repositorio.findAll()).thenReturn(java.util.List.of(config));
+        return new EnviadorSifenSoapService(
+                SSLContext.getDefault(), repositorio, mock(SifenEnvioHistorial.class), url, timeoutSegundos);
+    }
+
+    private String respuestaConsulta(String codigo, String mensaje) {
+        return "<env:Envelope xmlns:env=\"http://www.w3.org/2003/05/soap-envelope\"><env:Body>"
+                + "<ns2:rEnviConsDeResponse xmlns:ns2=\"http://ekuatia.set.gov.py/sifen/xsd\">"
+                + "<ns2:dFecProc>2026-11-03T10:00:00-03:00</ns2:dFecProc>"
+                + "<ns2:dCodRes>" + codigo + "</ns2:dCodRes>"
+                + "<ns2:dMsgRes>" + mensaje + "</ns2:dMsgRes>"
+                + "</ns2:rEnviConsDeResponse></env:Body></env:Envelope>";
     }
 }

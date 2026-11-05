@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -112,7 +113,7 @@ class FacturaServiceTest {
         factura.setCliente(clienteActivo());
         factura.getItems().add(item(1, "100000", TasaIva.DIEZ));
 
-        when(facturaRepository.findById(id)).thenReturn(java.util.Optional.of(factura));
+        when(facturaRepository.findByIdParaActualizar(id)).thenReturn(java.util.Optional.of(factura));
         factura.setNumeroDocumento(1);
         when(generadorDteService.generar(any(), any())).thenReturn(new DteFirmado("<xml/>", Instant.now()));
         when(enviadorSifenService.enviar(any(), any(), any()))
@@ -139,7 +140,7 @@ class FacturaServiceTest {
         factura.setCliente(clienteActivo());
         factura.getItems().add(item(1, "100000", TasaIva.DIEZ));
 
-        when(facturaRepository.findById(id)).thenReturn(java.util.Optional.of(factura));
+        when(facturaRepository.findByIdParaActualizar(id)).thenReturn(java.util.Optional.of(factura));
         factura.setNumeroDocumento(1);
         when(generadorDteService.generar(any(), any())).thenReturn(new DteFirmado("<xml/>", Instant.now()));
         when(enviadorSifenService.enviar(any(), any(), any()))
@@ -170,7 +171,7 @@ class FacturaServiceTest {
         respuestaPrevia.setId(UUID.randomUUID());
         factura.setRespuestaSifen(respuestaPrevia);
 
-        when(facturaRepository.findById(id)).thenReturn(java.util.Optional.of(factura));
+        when(facturaRepository.findByIdParaActualizar(id)).thenReturn(java.util.Optional.of(factura));
         factura.setNumeroDocumento(1);
         when(generadorDteService.generar(any(), any())).thenReturn(new DteFirmado("<xml/>", Instant.now()));
         when(enviadorSifenService.enviar(any(), any(), any()))
@@ -199,7 +200,7 @@ class FacturaServiceTest {
         factura.setPuntoExpedicion(punto);
         factura.getItems().add(item(1, "100000", TasaIva.DIEZ));
 
-        when(facturaRepository.findById(id)).thenReturn(java.util.Optional.of(factura));
+        when(facturaRepository.findByIdParaActualizar(id)).thenReturn(java.util.Optional.of(factura));
         when(puntoExpedicionRepository.findByIdParaNumerar(punto.getId())).thenReturn(java.util.Optional.of(punto));
         when(generadorDteService.generar(any(), any()))
                 .thenReturn(new DteFirmado("<rDE/>", Instant.now(), "0".repeat(44), "123456789"));
@@ -223,7 +224,7 @@ class FacturaServiceTest {
         FacturaElectronica factura = new FacturaElectronica();
         factura.setId(id);
         factura.setEstadoDte(EstadoDte.APROBADO);
-        when(facturaRepository.findById(id)).thenReturn(java.util.Optional.of(factura));
+        when(facturaRepository.findByIdParaActualizar(id)).thenReturn(java.util.Optional.of(factura));
 
         assertThatThrownBy(() -> facturaService.confirmarEnvio(id))
                 .isInstanceOf(BusinessException.class);
@@ -386,7 +387,7 @@ class FacturaServiceTest {
         punto.setUltimoNumeroNc(3);
         FacturaElectronica nota = notaExistente(factura, EstadoDte.BORRADOR, "100000");
 
-        when(facturaRepository.findById(nota.getId())).thenReturn(java.util.Optional.of(nota));
+        when(facturaRepository.findByIdParaActualizar(nota.getId())).thenReturn(java.util.Optional.of(nota));
         when(facturaRepository.findByFacturaAsociadaIdOrderByFechaEmisionAsc(factura.getId())).thenReturn(List.of(nota));
         when(puntoExpedicionRepository.findByIdParaNumerar(punto.getId())).thenReturn(java.util.Optional.of(punto));
         when(generadorDteService.generar(any(), any()))
@@ -413,7 +414,7 @@ class FacturaServiceTest {
         FacturaElectronica nota = notaExistente(factura, EstadoDte.BORRADOR, "30000");
         nota.setNumeroDocumento(1);
 
-        when(facturaRepository.findById(nota.getId())).thenReturn(java.util.Optional.of(nota));
+        when(facturaRepository.findByIdParaActualizar(nota.getId())).thenReturn(java.util.Optional.of(nota));
         when(facturaRepository.findByFacturaAsociadaIdOrderByFechaEmisionAsc(factura.getId())).thenReturn(List.of(nota));
         when(generadorDteService.generar(any(), any())).thenReturn(new DteFirmado("<rDE/>", Instant.now()));
         when(enviadorSifenService.enviar(any(), any(), any()))
@@ -434,6 +435,212 @@ class FacturaServiceTest {
 
         assertThatThrownBy(() -> facturaService.editarBorrador(nota.getId(), null))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void unaFallaDelCorreoNoRevierteLaFacturaAprobada() {
+        // BUG-001: antes la excepción del correo revertía toda la transacción, incluido el APROBADO.
+        FacturaElectronica factura = borradorListoParaConfirmar();
+        when(enviadorSifenService.enviar(any(), any(), any()))
+                .thenReturn(new RespuestaSifenResult(true, "0260", "Aprobado", "CDC-1"));
+        org.mockito.Mockito.doThrow(new java.io.UncheckedIOException(new java.io.IOException("disco lleno")))
+                .when(enviadorEmailService).enviar(any(), any(), any());
+
+        FacturaElectronica resultado = facturaService.confirmarEnvio(factura.getId());
+
+        assertThat(resultado.getEstadoDte()).isEqualTo(EstadoDte.APROBADO);
+        assertThat(resultado.isEmailEnviado()).isFalse();
+        verify(auditoriaService).registrar(org.mockito.ArgumentMatchers.eq("EMAIL_FALLIDO"), any(), any());
+    }
+
+    @Test
+    void sinEmailDelClienteNoIntentaElCorreoYLoDejaRegistrado() {
+        FacturaElectronica factura = borradorListoParaConfirmar();
+        factura.getCliente().setEmail(" ");
+        when(enviadorSifenService.enviar(any(), any(), any()))
+                .thenReturn(new RespuestaSifenResult(true, "0260", "Aprobado", "CDC-1"));
+
+        FacturaElectronica resultado = facturaService.confirmarEnvio(factura.getId());
+
+        assertThat(resultado.getEstadoDte()).isEqualTo(EstadoDte.APROBADO);
+        assertThat(resultado.isEmailEnviado()).isFalse();
+        verify(enviadorEmailService, never()).enviar(any(), any(), any());
+        verify(auditoriaService).registrar(org.mockito.ArgumentMatchers.eq("EMAIL_SIN_DESTINATARIO"), any(), any());
+    }
+
+    @Test
+    void reenviarCorreoDeUnDocumentoAprobado() {
+        FacturaElectronica factura = aprobadaParaReenviar();
+
+        assertThat(facturaService.reenviarCorreo(factura.getId()).isEmailEnviado()).isTrue();
+        verify(enviadorEmailService).enviar(org.mockito.ArgumentMatchers.eq(factura), any(), org.mockito.ArgumentMatchers.eq("<rDE>firmado</rDE>"));
+    }
+
+    @Test
+    void reenviarCorreoSinEmailExplicaQueHayQueCargarlo() {
+        FacturaElectronica factura = aprobadaParaReenviar();
+        factura.getCliente().setEmail(null);
+
+        assertThatThrownBy(() -> facturaService.reenviarCorreo(factura.getId()))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("no tiene email");
+    }
+
+    @Test
+    void reenviarCorreoDeUnBorradorNoSePermite() {
+        FacturaElectronica factura = aprobadaParaReenviar();
+        factura.setEstadoDte(EstadoDte.BORRADOR);
+
+        assertThatThrownBy(() -> facturaService.reenviarCorreo(factura.getId())).isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void confirmarLeeLaFacturaConBloqueoDeFila() {
+        // BUG-004: la lectura con bloqueo serializa dos confirmaciones simultáneas de la misma factura.
+        FacturaElectronica factura = borradorListoParaConfirmar();
+        when(enviadorSifenService.enviar(any(), any(), any()))
+                .thenReturn(new RespuestaSifenResult(false, "0160", "Rechazado", null));
+
+        facturaService.confirmarEnvio(factura.getId());
+
+        verify(facturaRepository).findByIdParaActualizar(factura.getId());
+        verify(facturaRepository, never()).findById(any());
+    }
+
+    @Test
+    void sinRespuestaDelSifenElDocumentoQuedaEnProcesoYNoComoRechazado() {
+        // BUG-006: un timeout no es un rechazo; reabrirlo generaría otro CDC.
+        FacturaElectronica factura = borradorListoParaConfirmar();
+        when(enviadorSifenService.enviar(any(), any(), any()))
+                .thenReturn(RespuestaSifenResult.sinConfirmar("ERROR_TIMEOUT", "El SIFEN no respondió a tiempo"));
+
+        FacturaElectronica resultado = facturaService.confirmarEnvio(factura.getId());
+
+        assertThat(resultado.getEstadoDte()).isEqualTo(EstadoDte.EN_PROCESO);
+        verify(enviadorEmailService, never()).enviar(any(), any(), any());
+        assertThatThrownBy(() -> facturaService.reabrir(factura.getId())).isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void verificarApruebaElDocumentoSiElSifenTieneElCdcSinReenviarlo() {
+        FacturaElectronica factura = documentoEnProceso("<rDE>firmado</rDE>");
+        when(enviadorSifenService.consultarDe(factura.getId(), factura.getCdc(), com.tottalstore.sifen.sifen.Ambiente.TEST))
+                .thenReturn(new RespuestaSifenResult(true, "0422", "CDC encontrado", factura.getCdc()));
+
+        FacturaElectronica resultado = facturaService.verificarEnvio(factura.getId());
+
+        assertThat(resultado.getEstadoDte()).isEqualTo(EstadoDte.APROBADO);
+        assertThat(resultado.isEmailEnviado()).isTrue();
+        verify(enviadorSifenService, never()).enviar(any(), any(), any());
+        verify(intentoEnvioSifenRepository, never()).save(any());
+    }
+
+    @Test
+    void verificarReenviaElMismoXmlFirmadoSiElSifenNoTieneElDocumento() {
+        FacturaElectronica factura = documentoEnProceso("<rDE>firmado</rDE>");
+        when(enviadorSifenService.consultarDe(any(), any(), any()))
+                .thenReturn(new RespuestaSifenResult(false, "0420", "Documento No Existe en SIFEN", null));
+        when(enviadorSifenService.enviar(factura.getId(), "<rDE>firmado</rDE>", com.tottalstore.sifen.sifen.Ambiente.TEST))
+                .thenReturn(new RespuestaSifenResult(true, "0260", "Aprobado", factura.getCdc()));
+
+        FacturaElectronica resultado = facturaService.verificarEnvio(factura.getId());
+
+        assertThat(resultado.getEstadoDte()).isEqualTo(EstadoDte.APROBADO);
+        assertThat(resultado.getCdc()).isEqualTo("01" + "2".repeat(42));
+        verify(generadorDteService, never()).generar(any(), any());
+        verify(intentoEnvioSifenRepository).save(any());
+    }
+
+    @Test
+    void pasadas72HorasDeLaFirmaNoReenviaYLoDaPorRechazadoParaReabrirlo() {
+        FacturaElectronica factura = documentoEnProceso("<rDE>firmado</rDE>");
+        factura.setFechaEmision(java.time.Instant.now().minus(java.time.Duration.ofHours(73)));
+        when(enviadorSifenService.consultarDe(any(), any(), any()))
+                .thenReturn(new RespuestaSifenResult(false, "0420", "Documento No Existe en SIFEN", null));
+
+        FacturaElectronica resultado = facturaService.verificarEnvio(factura.getId());
+
+        assertThat(resultado.getEstadoDte()).isEqualTo(EstadoDte.RECHAZADO);
+        assertThat(resultado.getRespuestaSifen().getCodigo()).isEqualTo("PLAZO_VENCIDO");
+        assertThat(resultado.getRespuestaSifen().getDescripcion()).contains("72 h");
+        verify(enviadorSifenService, never()).enviar(any(), any(), any());
+        verify(intentoEnvioSifenRepository, never()).save(any());
+    }
+
+    @Test
+    void pasadas72HorasSiElSifenSiLoTieneIgualQuedaAprobado() {
+        FacturaElectronica factura = documentoEnProceso("<rDE>firmado</rDE>");
+        factura.setFechaEmision(java.time.Instant.now().minus(java.time.Duration.ofHours(100)));
+        when(enviadorSifenService.consultarDe(any(), any(), any()))
+                .thenReturn(new RespuestaSifenResult(true, "0422", "CDC encontrado", factura.getCdc()));
+
+        assertThat(facturaService.verificarEnvio(factura.getId()).getEstadoDte()).isEqualTo(EstadoDte.APROBADO);
+    }
+
+    @Test
+    void siLaConsultaTampocoRespondeElDocumentoSigueEnProceso() {
+        FacturaElectronica factura = documentoEnProceso("<rDE>firmado</rDE>");
+        when(enviadorSifenService.consultarDe(any(), any(), any()))
+                .thenReturn(RespuestaSifenResult.sinConfirmar("ERROR_CONEXION", "Sin conexión"));
+
+        FacturaElectronica resultado = facturaService.verificarEnvio(factura.getId());
+
+        assertThat(resultado.getEstadoDte()).isEqualTo(EstadoDte.EN_PROCESO);
+        verify(enviadorSifenService, never()).enviar(any(), any(), any());
+    }
+
+    @Test
+    void noPermiteVerificarUnDocumentoQueNoEstaEnProceso() {
+        FacturaElectronica factura = facturaAprobada("100000");
+        when(facturaRepository.findByIdParaActualizar(factura.getId())).thenReturn(java.util.Optional.of(factura));
+
+        assertThatThrownBy(() -> facturaService.verificarEnvio(factura.getId())).isInstanceOf(BusinessException.class);
+    }
+
+    private FacturaElectronica borradorListoParaConfirmar() {
+        FacturaElectronica factura = new FacturaElectronica();
+        factura.setId(UUID.randomUUID());
+        factura.setEstadoDte(EstadoDte.BORRADOR);
+        factura.setCliente(clienteActivo());
+        factura.setNumeroDocumento(1);
+        factura.getItems().add(item(1, "100000", TasaIva.DIEZ));
+
+        org.mockito.Mockito.lenient().when(facturaRepository.findByIdParaActualizar(factura.getId()))
+                .thenReturn(java.util.Optional.of(factura));
+        org.mockito.Mockito.lenient().when(facturaRepository.findById(factura.getId()))
+                .thenReturn(java.util.Optional.of(factura));
+        when(generadorDteService.generar(any(), any())).thenReturn(new DteFirmado("<xml/>", Instant.now()));
+        when(enviadorSifenConfigRepository.findAll()).thenReturn(List.of());
+        when(facturaRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        org.mockito.Mockito.lenient().when(currentUser.obtener()).thenReturn(mock(Usuario.class));
+        return factura;
+    }
+
+    private FacturaElectronica documentoEnProceso(String xmlFirmado) {
+        FacturaElectronica factura = facturaAprobada("100000");
+        factura.setEstadoDte(EstadoDte.EN_PROCESO);
+        factura.setNumeroDocumento(7);
+        factura.setCdc("01" + "2".repeat(42));
+        com.tottalstore.sifen.sifen.RespuestaSifen respuesta = new com.tottalstore.sifen.sifen.RespuestaSifen();
+        respuesta.setXmlFirmado(xmlFirmado);
+        respuesta.setCodigo("ERROR_TIMEOUT");
+        factura.setRespuestaSifen(respuesta);
+
+        when(facturaRepository.findByIdParaActualizar(factura.getId())).thenReturn(java.util.Optional.of(factura));
+        when(enviadorSifenConfigRepository.findAll()).thenReturn(List.of());
+        when(facturaRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        org.mockito.Mockito.lenient().when(currentUser.obtener()).thenReturn(mock(Usuario.class));
+        return factura;
+    }
+
+    private FacturaElectronica aprobadaParaReenviar() {
+        FacturaElectronica factura = facturaAprobada("100000");
+        com.tottalstore.sifen.sifen.RespuestaSifen respuesta = new com.tottalstore.sifen.sifen.RespuestaSifen();
+        respuesta.setXmlFirmado("<rDE>firmado</rDE>");
+        factura.setRespuestaSifen(respuesta);
+        when(facturaRepository.findById(factura.getId())).thenReturn(java.util.Optional.of(factura));
+        org.mockito.Mockito.lenient().when(facturaRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        org.mockito.Mockito.lenient().when(currentUser.obtener()).thenReturn(mock(Usuario.class));
+        return factura;
     }
 
     private FacturaElectronica facturaAprobada(String total) {
@@ -504,6 +711,8 @@ class FacturaServiceTest {
     private Cliente clienteActivo() {
         Cliente cliente = new Cliente();
         cliente.setRuc("80012345-0");
+        cliente.setRazonSocial("Cliente de prueba");
+        cliente.setEmail("cliente@ejemplo.com.py");
         cliente.setActivo(true);
         return cliente;
     }

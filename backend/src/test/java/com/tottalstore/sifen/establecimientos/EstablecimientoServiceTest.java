@@ -22,7 +22,7 @@ class EstablecimientoServiceTest {
 
     private EstablecimientoRequest requestEjemplo(String codigo) {
         return new EstablecimientoRequest(
-                codigo, "Sucursal de prueba", null, null, null, null, null, null, null, null, null, null);
+                codigo, "Sucursal de prueba", null, null, null, null, null, null, null, null, null, null, null);
     }
 
     @Test

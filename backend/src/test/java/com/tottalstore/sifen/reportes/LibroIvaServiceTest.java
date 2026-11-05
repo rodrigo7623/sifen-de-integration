@@ -18,6 +18,11 @@ import com.tottalstore.sifen.facturacion.FacturaRepository;
 import com.tottalstore.sifen.facturacion.FacturaService;
 import com.tottalstore.sifen.facturacion.ItemFactura;
 import com.tottalstore.sifen.facturacion.TipoDocumento;
+import com.tottalstore.sifen.registro.ComprobanteRegistrado;
+import com.tottalstore.sifen.registro.ComprobanteRegistradoRepository;
+import com.tottalstore.sifen.registro.TipoComprobanteRg90;
+import com.tottalstore.sifen.registro.TipoIdentificacion;
+import com.tottalstore.sifen.registro.TipoRegistro;
 import com.tottalstore.sifen.reportes.dto.LibroIvaResponse;
 import com.tottalstore.sifen.shared.TasaIva;
 import java.io.ByteArrayInputStream;
@@ -45,12 +50,14 @@ class LibroIvaServiceTest {
     private FacturaRepository facturaRepository;
     @Mock
     private ConfiguracionEmisorService configuracionEmisorService;
+    @Mock
+    private ComprobanteRegistradoRepository comprobanteRepository;
 
     private LibroIvaService service;
 
     @BeforeEach
     void setUp() {
-        service = new LibroIvaService(facturaRepository, configuracionEmisorService);
+        service = new LibroIvaService(facturaRepository, comprobanteRepository, configuracionEmisorService);
         ConfiguracionEmisor emisor = new ConfiguracionEmisor();
         emisor.setRucBase("4309652");
         emisor.setDvRuc(2);
@@ -136,7 +143,9 @@ class LibroIvaServiceTest {
 
         LibroIvaResponse.Renglon renglonNc = libro.renglones().get(1);
         assertThat(renglonNc.tipoComprobante()).isEqualTo("Nota de crédito electrónica");
-        assertThat(renglonNc.condicion()).isEqualTo("Ajusta 001-002-0000005");
+        assertThat(renglonNc.condicion()).isEqualTo("-");
+        assertThat(renglonNc.documentoAsociado()).isEqualTo("001-002-0000005");
+        assertThat(renglonNc.sigla()).isEqualTo("NC");
         assertThat(renglonNc.gravado10()).isEqualByComparingTo("-110000");
         assertThat(renglonNc.iva10()).isEqualByComparingTo("-10000");
         assertThat(renglonNc.total()).isEqualByComparingTo("-110000");
@@ -159,8 +168,8 @@ class LibroIvaServiceTest {
             Sheet hoja = wb.getSheetAt(0);
             assertThat(hoja.getRow(3).getCell(0).getStringCellValue()).isEqualTo("Fecha");
             assertThat(hoja.getRow(4).getCell(2).getStringCellValue()).isEqualTo("001-002-0000003");
-            assertThat(hoja.getRow(4).getCell(7).getNumericCellValue()).isEqualTo(110000.0);
-            assertThat(hoja.getRow(4).getCell(8).getNumericCellValue()).isEqualTo(10000.0);
+            assertThat(hoja.getRow(4).getCell(8).getNumericCellValue()).isEqualTo(110000.0);
+            assertThat(hoja.getRow(4).getCell(9).getNumericCellValue()).isEqualTo(10000.0);
             assertThat(hoja.getRow(5).getCell(0).getStringCellValue()).startsWith("Totales (1");
         }
     }
@@ -181,6 +190,79 @@ class LibroIvaServiceTest {
             String texto = new PDFTextStripper().getText(doc);
             assertThat(texto).contains("Libro IVA Ventas").contains("001-002-0000060").contains("660.000");
         }
+    }
+
+    private static ComprobanteRegistrado registrado(TipoRegistro registro, TipoComprobanteRg90 tipo, String numero,
+            String gravado10, String iva10, boolean imputaIva) {
+        ComprobanteRegistrado c = new ComprobanteRegistrado();
+        c.setId(java.util.UUID.randomUUID());
+        c.setTipoRegistro(registro);
+        c.setTipoComprobante(tipo);
+        c.setFechaEmision(java.time.LocalDate.of(2026, 10, 10));
+        c.setTipoIdentificacion(TipoIdentificacion.RUC);
+        c.setIdentificacion("80024627-1");
+        c.setRazonSocial("PROVEEDOR S.A.");
+        c.setTimbrado("11223369");
+        c.setNumero(numero);
+        c.setGravado10(new BigDecimal(gravado10));
+        c.setIva10(new BigDecimal(iva10));
+        c.setTotal(new BigDecimal(gravado10));
+        c.setImputaIva(imputaIva);
+        c.setImputaIre(!imputaIva);
+        return c;
+    }
+
+    @Test
+    void elLibroComprasSoloLlevaLoImputadoAlIvaYLaNotaDeCreditoRestaCredito() {
+        ComprobanteRegistrado compra = registrado(TipoRegistro.COMPRA, TipoComprobanteRg90.FACTURA, "001-001-0000010", "1100000", "100000", true);
+        ComprobanteRegistrado soloIre = registrado(TipoRegistro.COMPRA, TipoComprobanteRg90.FACTURA, "001-001-0000011", "220000", "20000", false);
+        ComprobanteRegistrado nc = registrado(TipoRegistro.COMPRA, TipoComprobanteRg90.NOTA_CREDITO, "001-001-0000002", "110000", "10000", true);
+        nc.setAsociadoNumero("001-001-0000010");
+        when(comprobanteRepository.delPeriodo(eq(TipoRegistro.COMPRA), any(), any())).thenReturn(List.of(compra, soloIre, nc));
+
+        LibroIvaResponse libro = service.generar(YearMonth.of(2026, 10), LibroIvaResponse.TipoLibro.COMPRAS);
+
+        assertThat(libro.libro()).isEqualTo(LibroIvaResponse.TipoLibro.COMPRAS);
+        assertThat(libro.renglones()).hasSize(2);
+        assertThat(libro.renglones()).extracting(LibroIvaResponse.Renglon::origen).containsOnly(LibroIvaResponse.Origen.REGISTRADO);
+        assertThat(libro.totales().totalIva()).isEqualByComparingTo("90000");
+        // Las facturas del SIFEN son ventas: no se consultan para el libro de compras.
+        verify(facturaRepository, org.mockito.Mockito.never()).findEmitidasEntre(any(), any(), any());
+    }
+
+    @Test
+    void elLibroVentasSumaLasVentasPreimpresasALasDelSifen() {
+        FacturaElectronica electronica = factura(3, "2026-10-12T10:00:00-03:00", item(1, "110000", TasaIva.DIEZ));
+        ComprobanteRegistrado preimpresa = registrado(TipoRegistro.VENTA, TipoComprobanteRg90.FACTURA, "002-001-0000500", "55000", "5000", true);
+        when(facturaRepository.findEmitidasEntre(any(), any(), any())).thenReturn(List.of(electronica));
+        when(comprobanteRepository.delPeriodo(eq(TipoRegistro.VENTA), any(), any())).thenReturn(List.of(preimpresa));
+
+        LibroIvaResponse libro = service.generar(YearMonth.of(2026, 10));
+
+        // Ordenado por fecha: la preimpresa (10/10) va antes que la electrónica (12/10).
+        assertThat(libro.renglones()).extracting(LibroIvaResponse.Renglon::sigla).containsExactly("FAC", "FE");
+        assertThat(libro.totales().totalIva()).isEqualByComparingTo("15000");
+    }
+
+    @Test
+    void laLiquidacionRestaElCreditoAlDebitoYCuentaLoQueVaAlArchivoRg90() {
+        FacturaElectronica venta = factura(3, "2026-10-12T10:00:00-03:00", item(1, "1100000", TasaIva.DIEZ));
+        ComprobanteRegistrado compra = registrado(TipoRegistro.COMPRA, TipoComprobanteRg90.FACTURA, "001-001-0000010", "330000", "30000", true);
+        ComprobanteRegistrado deRecibido = registrado(TipoRegistro.COMPRA, TipoComprobanteRg90.FACTURA, "001-001-0000012", "110000", "10000", true);
+        deRecibido.setCdc("0".repeat(44));
+        when(facturaRepository.findEmitidasEntre(any(), any(), any())).thenReturn(List.of(venta));
+        when(comprobanteRepository.delPeriodo(eq(TipoRegistro.COMPRA), any(), any())).thenReturn(List.of(compra, deRecibido));
+        when(comprobanteRepository.delPeriodo(eq(TipoRegistro.VENTA), any(), any())).thenReturn(List.of());
+        when(comprobanteRepository.delPeriodo(any(java.time.LocalDate.class), any(java.time.LocalDate.class)))
+                .thenReturn(List.of(compra, deRecibido));
+
+        var liquidacion = service.liquidacion(YearMonth.of(2026, 10));
+
+        assertThat(liquidacion.debitoFiscal()).isEqualByComparingTo("100000");
+        assertThat(liquidacion.creditoFiscal()).isEqualByComparingTo("40000");
+        assertThat(liquidacion.saldo()).isEqualByComparingTo("60000");
+        assertThat(liquidacion.comprobantesParaRg90()).isEqualTo(1);
+        assertThat(liquidacion.comprobantesElectronicosExcluidos()).isEqualTo(1);
     }
 
     private static FacturaElectronica factura(int numero, String fecha, ItemFactura... items) {

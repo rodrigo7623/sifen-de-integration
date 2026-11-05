@@ -1,6 +1,7 @@
 package com.tottalstore.sifen.sifen.dte;
 
 import com.tottalstore.sifen.clientes.Cliente;
+import com.tottalstore.sifen.configuracion.ActividadEconomicaEmisor;
 import com.tottalstore.sifen.configuracion.ConfiguracionEmisor;
 import com.tottalstore.sifen.establecimientos.Establecimiento;
 import com.tottalstore.sifen.facturacion.CondicionPago;
@@ -192,9 +193,12 @@ public class DeXmlBuilder {
         el(gEmis, "dDesCiuEmi", usaEstablecimiento ? est.getCiudadDescripcion() : emisor.getCiudadDescripcion());
         el(gEmis, "dTelEmi", valorODefecto(est.getTelefono(), emisor.getTelefono()));
         el(gEmis, "dEmailE", valorODefecto(est.getEmail(), emisor.getEmail()));
-        Element gActEco = hijo(gEmis, "gActEco");
-        el(gActEco, "cActEco", emisor.getActividadEconomicaCodigo());
-        el(gActEco, "dDesActEco", emisor.getActividadEconomicaDescripcion());
+        // D2.1: una ocurrencia por actividad (hasta 9), la principal primero.
+        for (ActividadEconomicaEmisor actividad : emisor.actividadesOrdenadas()) {
+            Element gActEco = hijo(gEmis, "gActEco");
+            el(gActEco, "cActEco", actividad.getCodigo());
+            el(gActEco, "dDesActEco", actividad.getDescripcion());
+        }
     }
 
     /** D3: receptor. Devuelve la identificación que va en el QR (D206 o D210). */

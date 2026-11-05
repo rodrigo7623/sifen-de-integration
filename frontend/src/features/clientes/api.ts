@@ -7,6 +7,8 @@ export interface ClienteInput {
   direccion: string;
   email: string;
   condicionIva: CondicionIva;
+  /** Al editar permite reactivar o desactivar. */
+  activo?: boolean;
 }
 
 export const clientesApi = {

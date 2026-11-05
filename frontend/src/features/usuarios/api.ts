@@ -12,6 +12,7 @@ export interface UsuarioEditarInput {
   nombre: string;
   rol: Rol;
   password: string | null;
+  activo: boolean;
 }
 
 export const usuariosApi = {

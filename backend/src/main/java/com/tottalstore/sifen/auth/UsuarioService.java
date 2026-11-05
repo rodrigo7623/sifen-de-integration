@@ -52,10 +52,29 @@ public class UsuarioService {
 
     public Usuario editar(UUID id, UsuarioEditarRequest request) {
         Usuario usuario = obtener(id);
+        boolean esPropio = usuario.getId().equals(currentUser.obtener().getId());
+        if (usuario.getRol() == Rol.ADMIN && request.rol() != Rol.ADMIN) {
+            // BUG-011: sin esto el único ADMIN podía pasarse a OPERARIO y nadie más podía administrar.
+            if (esPropio) {
+                throw new BusinessException("No podés quitarte tu propio rol de administrador");
+            }
+            exigirOtroAdminActivo(usuario);
+        }
         usuario.setNombre(request.nombre());
         usuario.setRol(request.rol());
         if (request.password() != null && !request.password().isBlank()) {
             usuario.setPasswordHash(passwordEncoder.encode(request.password()));
+        }
+        if (request.activo() != null) {
+            if (!request.activo() && usuario.isActivo()) {
+                if (esPropio) {
+                    throw new BusinessException("No podés desactivar tu propio usuario");
+                }
+                if (usuario.getRol() == Rol.ADMIN) {
+                    exigirOtroAdminActivo(usuario);
+                }
+            }
+            usuario.setActivo(request.activo());
         }
         return usuarioRepository.save(usuario);
     }
@@ -71,7 +90,18 @@ public class UsuarioService {
         if (usuario.getId().equals(currentUser.obtener().getId())) {
             throw new BusinessException("No podés desactivar tu propio usuario");
         }
+        if (usuario.getRol() == Rol.ADMIN && usuario.isActivo()) {
+            exigirOtroAdminActivo(usuario);
+        }
         usuario.setActivo(false);
         usuarioRepository.save(usuario);
+    }
+
+    /** El sistema siempre tiene que quedar con al menos un ADMIN activo además de {@code usuario}. */
+    private void exigirOtroAdminActivo(Usuario usuario) {
+        if (usuarioRepository.countByRolAndActivoTrueAndIdNot(Rol.ADMIN, usuario.getId()) == 0) {
+            throw new BusinessException(
+                    "Debe quedar al menos un administrador activo y " + usuario.getEmail() + " es el único");
+        }
     }
 }

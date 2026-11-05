@@ -61,6 +61,14 @@ export const facturasApi = {
     const { data } = await apiClient.post<Factura>(`/facturas/${id}/confirmar`, {});
     return data;
   },
+  async reenviarCorreo(id: string): Promise<Factura> {
+    const { data } = await apiClient.post<Factura>(`/facturas/${id}/reenviar-correo`, {});
+    return data;
+  },
+  async verificar(id: string): Promise<Factura> {
+    const { data } = await apiClient.post<Factura>(`/facturas/${id}/verificar`, {});
+    return data;
+  },
   async reabrir(id: string): Promise<Factura> {
     const { data } = await apiClient.post<Factura>(`/facturas/${id}/reabrir`, {});
     return data;

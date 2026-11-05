@@ -5,6 +5,7 @@ import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { AdminRoute } from "./auth/AdminRoute";
 import { AuditoriaPage } from "./features/auditoria/AuditoriaPage";
 import { ClientesPage } from "./features/clientes/ClientesPage";
+import { ComprobantesPage } from "./features/compras/ComprobantesPage";
 import { ConfiguracionPage } from "./features/configuracion/ConfiguracionPage";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { EstablecimientosPage } from "./features/establecimientos/EstablecimientosPage";
@@ -33,6 +34,7 @@ export function App() {
             <Route path="/notas/:id" element={<NotaFormPage />} />
             <Route path="/productos" element={<ProductosPage />} />
             <Route path="/clientes" element={<ClientesPage />} />
+            <Route path="/comprobantes" element={<ComprobantesPage />} />
             <Route path="/reportes/libro-iva" element={<LibroIvaPage />} />
             <Route path="/reportes/rechazos" element={<RechazosPage />} />
             <Route element={<AdminRoute />}>

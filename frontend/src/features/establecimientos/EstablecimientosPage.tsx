@@ -1,5 +1,5 @@
 import { Plus } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type FormEvent, type InputHTMLAttributes } from "react";
 import { extraerMensajeError } from "../../api/client";
 import type { Establecimiento, PuntoExpedicion } from "../../api/types";
 import { Badge } from "../../components/ui/Badge";
@@ -29,6 +29,7 @@ const FORM_ESTABLECIMIENTO_VACIO: EstablecimientoInput = {
   ciudadDescripcion: "",
   telefono: "",
   email: "",
+  activo: true,
 };
 
 const FORM_PUNTO_VACIO: PuntoExpedicionInput = { codigo: "", descripcion: "" };
@@ -88,9 +89,19 @@ export function EstablecimientosPage() {
       ciudadDescripcion: e.ciudadDescripcion ?? "",
       telefono: e.telefono ?? "",
       email: e.email ?? "",
+      activo: e.activo,
     });
     setErrorFormulario(null);
     setModalEstablecimiento(true);
+  }
+
+  function campoEstablecimiento(nombre: keyof Omit<EstablecimientoInput, "activo">, extra: InputHTMLAttributes<HTMLInputElement>) {
+    return {
+      ...extra,
+      value: formEstablecimiento[nombre],
+      onChange: (e: ChangeEvent<HTMLInputElement>) =>
+        setFormEstablecimiento({ ...formEstablecimiento, [nombre]: e.target.value }),
+    };
   }
 
   async function onSubmitEstablecimiento(ev: FormEvent) {
@@ -261,86 +272,60 @@ export function EstablecimientosPage() {
           onClose={() => setModalEstablecimiento(false)}
         >
           <form onSubmit={onSubmitEstablecimiento}>
+            <p className="mb-3 text-xs text-texto-suave">
+              En departamento, distrito y ciudad va el <b>código numérico</b> de la tabla de referencia del SIFEN; el
+              nombre va en el campo de al lado.
+            </p>
             <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
               <FormField label="Código (3 dígitos)">
-                <input
-                  value={formEstablecimiento.codigo}
-                  onChange={(e) => setFormEstablecimiento({ ...formEstablecimiento, codigo: e.target.value })}
-                  placeholder="001"
-                  maxLength={3}
-                  required
-                />
+                <input {...campoEstablecimiento("codigo", { required: true, inputMode: "numeric", pattern: "\d{3}", maxLength: 3, placeholder: "001", title: "3 dígitos, ej. 001" })} />
               </FormField>
               <FormField label="Denominación">
-                <input
-                  value={formEstablecimiento.denominacion}
-                  onChange={(e) =>
-                    setFormEstablecimiento({ ...formEstablecimiento, denominacion: e.target.value })
-                  }
-                  placeholder="Casa matriz"
-                  required
-                />
+                <input {...campoEstablecimiento("denominacion", { required: true, maxLength: 100, placeholder: "Casa matriz" })} />
               </FormField>
               <FormField label="Dirección">
-                <input
-                  value={formEstablecimiento.direccion}
-                  onChange={(e) => setFormEstablecimiento({ ...formEstablecimiento, direccion: e.target.value })}
-                />
+                <input {...campoEstablecimiento("direccion", { maxLength: 255 })} />
               </FormField>
               <FormField label="Número de casa">
-                <input
-                  value={formEstablecimiento.numeroCasa}
-                  onChange={(e) =>
-                    setFormEstablecimiento({ ...formEstablecimiento, numeroCasa: e.target.value })
-                  }
-                />
+                <input {...campoEstablecimiento("numeroCasa", { maxLength: 10 })} />
               </FormField>
-              <FormField label="Departamento (código)">
-                <input
-                  value={formEstablecimiento.departamentoCodigo}
-                  onChange={(e) =>
-                    setFormEstablecimiento({ ...formEstablecimiento, departamentoCodigo: e.target.value })
-                  }
-                />
+              <FormField label="Departamento (código numérico)">
+                <input {...campoEstablecimiento("departamentoCodigo", { inputMode: "numeric", pattern: "\d{0,5}", maxLength: 5, title: "Código numérico del SIFEN, hasta 5 dígitos", placeholder: "1" })} />
               </FormField>
-              <FormField label="Departamento (descripción)">
-                <input
-                  value={formEstablecimiento.departamentoDescripcion}
-                  onChange={(e) =>
-                    setFormEstablecimiento({ ...formEstablecimiento, departamentoDescripcion: e.target.value })
-                  }
-                />
+              <FormField label="Departamento (nombre)">
+                <input {...campoEstablecimiento("departamentoDescripcion", { maxLength: 50, placeholder: "CAPITAL" })} />
               </FormField>
-              <FormField label="Ciudad (código)">
-                <input
-                  value={formEstablecimiento.ciudadCodigo}
-                  onChange={(e) =>
-                    setFormEstablecimiento({ ...formEstablecimiento, ciudadCodigo: e.target.value })
-                  }
-                />
+              <FormField label="Distrito (código numérico, opcional)">
+                <input {...campoEstablecimiento("distritoCodigo", { inputMode: "numeric", pattern: "\d{0,5}", maxLength: 5, title: "Código numérico del SIFEN, hasta 5 dígitos" })} />
               </FormField>
-              <FormField label="Ciudad (descripción)">
-                <input
-                  value={formEstablecimiento.ciudadDescripcion}
-                  onChange={(e) =>
-                    setFormEstablecimiento({ ...formEstablecimiento, ciudadDescripcion: e.target.value })
-                  }
-                />
+              <FormField label="Distrito (nombre)">
+                <input {...campoEstablecimiento("distritoDescripcion", { maxLength: 50 })} />
+              </FormField>
+              <FormField label="Ciudad (código numérico)">
+                <input {...campoEstablecimiento("ciudadCodigo", { inputMode: "numeric", pattern: "\d{0,5}", maxLength: 5, title: "Código numérico del SIFEN, hasta 5 dígitos", placeholder: "1" })} />
+              </FormField>
+              <FormField label="Ciudad (nombre)">
+                <input {...campoEstablecimiento("ciudadDescripcion", { maxLength: 50, placeholder: "ASUNCION (DISTRITO)" })} />
               </FormField>
               <FormField label="Teléfono">
-                <input
-                  value={formEstablecimiento.telefono}
-                  onChange={(e) => setFormEstablecimiento({ ...formEstablecimiento, telefono: e.target.value })}
-                />
+                <input {...campoEstablecimiento("telefono", { maxLength: 20, type: "tel" })} />
               </FormField>
               <FormField label="Email">
-                <input
-                  type="email"
-                  value={formEstablecimiento.email}
-                  onChange={(e) => setFormEstablecimiento({ ...formEstablecimiento, email: e.target.value })}
-                />
+                <input {...campoEstablecimiento("email", { maxLength: 100, type: "email" })} />
               </FormField>
             </div>
+
+            {editandoId && (
+              <label className="mb-3 flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="w-auto"
+                  checked={formEstablecimiento.activo}
+                  onChange={(e) => setFormEstablecimiento({ ...formEstablecimiento, activo: e.target.checked })}
+                />
+                Activo (disponible para emitir facturas)
+              </label>
+            )}
 
             {errorFormulario && <p className="mb-2 text-sm text-rojo">{errorFormulario}</p>}
 
@@ -365,6 +350,9 @@ export function EstablecimientosPage() {
                 value={formPunto.codigo}
                 onChange={(e) => setFormPunto({ ...formPunto, codigo: e.target.value })}
                 placeholder="001"
+                inputMode="numeric"
+                pattern="d{3}"
+                title="3 dígitos, ej. 001"
                 maxLength={3}
                 required
               />
@@ -374,6 +362,7 @@ export function EstablecimientosPage() {
                 value={formPunto.descripcion}
                 onChange={(e) => setFormPunto({ ...formPunto, descripcion: e.target.value })}
                 placeholder="Caja principal"
+                maxLength={100}
               />
             </FormField>
 

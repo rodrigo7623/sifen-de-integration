@@ -14,6 +14,8 @@ export interface EstablecimientoInput {
   ciudadDescripcion: string;
   telefono: string;
   email: string;
+  /** Al editar permite reactivar o desactivar. */
+  activo: boolean;
 }
 
 export interface PuntoExpedicionInput {

@@ -1,5 +1,7 @@
 package com.tottalstore.sifen.common;
 
+import java.util.regex.Matcher;
+import org.springframework.dao.DataIntegrityViolationException;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,7 +56,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiError> handleValidation(MethodArgumentNotValidException ex) {
         List<String> detalles = ex.getBindingResult().getFieldErrors().stream()
-                .map(err -> err.getField() + ": " + err.getDefaultMessage())
+                // Los mensajes ya nombran el campo ("La denominación admite hasta 100 caracteres"), así
+                // que se muestran tal cual en pantalla, sin el nombre técnico del atributo.
+                .map(err -> err.getDefaultMessage())
+                .distinct()
                 .toList();
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiError.of(400, "VALIDATION_ERROR", "Datos inválidos", detalles));
@@ -79,6 +84,36 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> handleMissingParameter(MissingServletRequestParameterException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiError.of(400, "INVALID_REQUEST", "Falta el parámetro '" + ex.getParameterName() + "'"));
+    }
+
+    private static final java.util.regex.Pattern LARGO_MAXIMO =
+            java.util.regex.Pattern.compile("(?:character varying|varchar)\\((\\d+)\\)", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Red de seguridad para lo que la validación de los DTO no haya atajado (antes terminaba en el 500
+     * "Ocurrió un error inesperado"): dato más largo que la columna, valor duplicado o referencia rota.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiError> handleDataIntegrity(DataIntegrityViolationException ex) {
+        String causa = String.valueOf(ex.getMostSpecificCause().getMessage());
+        log.warn("Violación de integridad de datos: {}", causa);
+        String texto = causa.toLowerCase();
+        Matcher largo = LARGO_MAXIMO.matcher(causa);
+        if (texto.contains("demasiado largo") || texto.contains("too long")) {
+            String maximo = largo.find() ? " (máximo " + largo.group(1) + " caracteres)" : "";
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiError.of(400, "VALIDATION_ERROR",
+                    "Uno de los datos ingresados supera el largo permitido" + maximo + ". Revisá los campos del formulario."));
+        }
+        if (texto.contains("llave duplicada") || texto.contains("duplicate key") || texto.contains("unique")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiError.of(409, "DUPLICADO",
+                    "Ya existe un registro con esos datos (código, RUC o email repetido)."));
+        }
+        if (texto.contains("llave foránea") || texto.contains("foreign key")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiError.of(409, "REFERENCIA",
+                    "La operación hace referencia a un registro que no existe o que está en uso."));
+        }
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiError.of(400, "VALIDATION_ERROR",
+                "Los datos no cumplen las restricciones de la base de datos. Revisá los campos del formulario."));
     }
 
     @ExceptionHandler(Exception.class)

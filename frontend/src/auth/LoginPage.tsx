@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { extraerMensajeError } from "../api/client";
+import { extraerMensajeError, SESION_VENCIDA_AVISO_KEY } from "../api/client";
 import { Button } from "../components/ui/Button";
 import { useAuth } from "./AuthContext";
 
@@ -10,6 +10,8 @@ export function LoginPage() {
   const [email, setEmail] = useState("admin@tottalstore.com");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // BUG-010: si se llegó acá porque venció la sesión, se explica en vez de mostrar un login "mudo".
+  const [aviso] = useState<string | null>(() => sessionStorage.getItem(SESION_VENCIDA_AVISO_KEY));
   const [cargando, setCargando] = useState(false);
 
   async function onSubmit(e: FormEvent) {
@@ -58,6 +60,11 @@ export function LoginPage() {
           required
         />
 
+        {aviso && !error && (
+          <p className="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="status">
+            {aviso}
+          </p>
+        )}
         {error && <p className="mt-2 text-sm text-rojo">{error}</p>}
 
         <Button type="submit" disabled={cargando} className="mt-5 w-full py-2.5">

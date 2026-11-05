@@ -16,9 +16,29 @@ import org.springframework.web.bind.annotation.RestController;
 public class SifenDiagnosticoController {
 
     private final ObjectProvider<ConsultaRucSifenService> consultaRucSifenService;
+    private final EnviadorSifenService enviadorSifenService;
+    private final EnviadorSifenConfigRepository enviadorSifenConfigRepository;
 
-    public SifenDiagnosticoController(ObjectProvider<ConsultaRucSifenService> consultaRucSifenService) {
+    public SifenDiagnosticoController(
+            ObjectProvider<ConsultaRucSifenService> consultaRucSifenService,
+            EnviadorSifenService enviadorSifenService,
+            EnviadorSifenConfigRepository enviadorSifenConfigRepository) {
         this.consultaRucSifenService = consultaRucSifenService;
+        this.enviadorSifenService = enviadorSifenService;
+        this.enviadorSifenConfigRepository = enviadorSifenConfigRepository;
+    }
+
+    /** Consulta un DE por CDC (siConsDE): permite confirmar en el SIFEN cualquier documento emitido. */
+    @GetMapping("/consulta-de/{cdc}")
+    public RespuestaSifenResult consultarDe(@PathVariable String cdc) {
+        if (!cdc.matches("\\d{44}")) {
+            throw new IllegalArgumentException("El CDC debe tener 44 dígitos");
+        }
+        Ambiente ambiente = enviadorSifenConfigRepository.findAll().stream()
+                .findFirst()
+                .map(EnviadorSifenConfig::getAmbiente)
+                .orElse(Ambiente.TEST);
+        return enviadorSifenService.consultarDe(null, cdc, ambiente);
     }
 
     @GetMapping("/consulta-ruc/{ruc}")

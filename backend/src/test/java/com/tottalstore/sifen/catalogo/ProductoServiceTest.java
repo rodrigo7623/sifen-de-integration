@@ -31,7 +31,7 @@ class ProductoServiceTest {
     @Test
     void creaProductoCuandoElCodigoNoExiste() {
         ProductoRequest request = new ProductoRequest("TLD-220V", "Taladro percutor", "UN",
-                new BigDecimal("350000"), TasaIva.DIEZ);
+                new BigDecimal("350000"), TasaIva.DIEZ, null);
         when(productoRepository.existsById("TLD-220V")).thenReturn(false);
         when(productoRepository.save(any(Producto.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -44,7 +44,7 @@ class ProductoServiceTest {
     @Test
     void rechazaCodigoDuplicado() {
         ProductoRequest request = new ProductoRequest("TLD-220V", "Taladro percutor", "UN",
-                new BigDecimal("350000"), TasaIva.DIEZ);
+                new BigDecimal("350000"), TasaIva.DIEZ, null);
         when(productoRepository.existsById("TLD-220V")).thenReturn(true);
 
         assertThatThrownBy(() -> productoService.crear(request))
@@ -55,7 +55,7 @@ class ProductoServiceTest {
     @Test
     void rechazaPrecioNoPositivo() {
         ProductoRequest request = new ProductoRequest("TLD-220V", "Taladro percutor", "UN",
-                new BigDecimal("0"), TasaIva.DIEZ);
+                new BigDecimal("0"), TasaIva.DIEZ, null);
         when(productoRepository.existsById("TLD-220V")).thenReturn(false);
 
         assertThatThrownBy(() -> productoService.crear(request))

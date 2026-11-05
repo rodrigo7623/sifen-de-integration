@@ -82,6 +82,9 @@ class CifradoSecretosTest {
     @Test
     void elPostProcessorFallaSiHayUnSecretoCifradoYNoHayClaveMaestra() {
         StandardEnvironment environment = entornoCon(Map.of("SIFEN_FIRMA_KEYSTORE_PASSWORD", cifrado.cifrar("clave-pfx")));
+        // Sin la clave maestra real de la máquina (variable de usuario SIFEN_MASTER_KEY), si la hay.
+        environment.getPropertySources().remove(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME);
+        environment.getPropertySources().remove(StandardEnvironment.SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME);
 
         assertThatThrownBy(() -> new DescifradoSecretosPostProcessor(new DeferredLogs())
                         .postProcessEnvironment(environment, new SpringApplication()))

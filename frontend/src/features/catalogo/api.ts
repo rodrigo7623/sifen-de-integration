@@ -5,8 +5,10 @@ export interface ProductoInput {
   codigo: string;
   descripcion: string;
   unidadMedida: string;
-  precioBase: number;
+  precioBase: number | null;
   tasaIva: TasaIva;
+  /** Al editar permite reactivar un producto dado de baja. */
+  activo: boolean;
 }
 
 export const productosApi = {

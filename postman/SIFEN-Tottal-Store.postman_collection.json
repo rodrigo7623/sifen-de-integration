@@ -86,6 +86,22 @@
     {
       "key": "periodo",
       "value": ""
+    },
+    {
+      "key": "facturaIdSinRespuesta",
+      "value": ""
+    },
+    {
+      "key": "numeroSinRespuesta",
+      "value": ""
+    },
+    {
+      "key": "usuarioIdTemporal",
+      "value": ""
+    },
+    {
+      "key": "tokenTemporal",
+      "value": ""
     }
   ],
   "item": [
@@ -2250,6 +2266,458 @@
                     "type": "text/javascript",
                     "exec": [
                       "pm.test('status 409', () => pm.response.to.have.status(409));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Correcciones de defectos",
+          "item": [
+            {
+              "name": "BUG-006 Setup: borrador que el SIFEN simulado no responde",
+              "request": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{baseUrl}}/facturas",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "facturas"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"clienteRuc\": \"{{clienteRucFactura}}\",\n  \"establecimientoId\": \"{{establecimientoIdFactura}}\",\n  \"puntoExpedicionId\": \"{{puntoExpedicionIdFactura}}\",\n  \"condicionPago\": \"CONTADO\",\n  \"items\": [\n    {\n      \"descripcion\": \"Amoladora 115mm SIN_RESPUESTA (el SIFEN simulado no responde)\",\n      \"cantidad\": 1,\n      \"precioUnitario\": 280000,\n      \"tasaIva\": \"DIEZ\"\n    }\n  ]\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 201', () => pm.response.to.have.status(201));",
+                      "pm.collectionVariables.set('facturaIdSinRespuesta', pm.response.json().id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "BUG-006 Confirmar sin respuesta del SIFEN: queda EN_PROCESO, no RECHAZADO",
+              "request": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{baseUrl}}/facturas/{{facturaIdSinRespuesta}}/confirmar",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "facturas",
+                    "{{facturaIdSinRespuesta}}",
+                    "confirmar"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "const f = pm.response.json();",
+                      "pm.test('estado EN_PROCESO', () => pm.expect(f.estadoDte).to.eql('EN_PROCESO'));",
+                      "pm.test('ya tiene número asignado', () => pm.expect(f.numero).to.be.a('string'));",
+                      "pm.test('explica que hay que verificarlo', () => pm.expect(f.motivoRechazo).to.include('verificar'));",
+                      "pm.collectionVariables.set('numeroSinRespuesta', f.numero);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "BUG-006 Reabrir un documento EN_PROCESO no está permitido (generaría otro CDC)",
+              "request": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{baseUrl}}/facturas/{{facturaIdSinRespuesta}}/reabrir",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "facturas",
+                    "{{facturaIdSinRespuesta}}",
+                    "reabrir"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 409', () => pm.response.to.have.status(409));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "BUG-006 Verificar en el SIFEN: queda aprobado con el mismo número",
+              "request": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{baseUrl}}/facturas/{{facturaIdSinRespuesta}}/verificar",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "facturas",
+                    "{{facturaIdSinRespuesta}}",
+                    "verificar"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "const f = pm.response.json();",
+                      "pm.test('estado APROBADO', () => pm.expect(f.estadoDte).to.eql('APROBADO'));",
+                      "pm.test('conserva el número', () => pm.expect(f.numero).to.eql(pm.collectionVariables.get('numeroSinRespuesta')));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "BUG-006 Un documento aprobado no se vuelve a verificar",
+              "request": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{baseUrl}}/facturas/{{facturaIdSinRespuesta}}/verificar",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "facturas",
+                    "{{facturaIdSinRespuesta}}",
+                    "verificar"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 409', () => pm.response.to.have.status(409));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Consulta de DE por CDC (siConsDE): una FE aprobada por el SIFEN de test",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/sifen/consulta-de/01043096522001001000000512026110218000177288",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "sifen",
+                    "consulta-de",
+                    "01043096522001001000000512026110218000177288"
+                  ]
+                },
+                "header": []
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('CDC encontrado (0422)', () => pm.expect(pm.response.json().codigo).to.eql('0422'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Consulta de DE con un CDC mal formado → 400",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/sifen/consulta-de/123",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "sifen",
+                    "consulta-de",
+                    "123"
+                  ]
+                },
+                "header": []
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 400', () => pm.response.to.have.status(400));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "BUG-003 Cambiar el RUC de un cliente → 409 (antes duplicaba el cliente)",
+              "request": {
+                "method": "PUT",
+                "url": {
+                  "raw": "{{baseUrl}}/clientes/{{clienteRucFactura}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "clientes",
+                    "{{clienteRucFactura}}"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ruc\": \"80099999-1\",\n  \"razonSocial\": \"Cliente con RUC cambiado\",\n  \"condicionIva\": \"RESPONSABLE_IVA\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 409', () => pm.response.to.have.status(409));",
+                      "pm.test('explica que el RUC no se modifica', () => pm.expect(pm.response.text()).to.include('no se puede modificar'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "BUG-005 Setup: operario temporal",
+              "request": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{baseUrl}}/usuarios",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "usuarios"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"nombre\": \"Operario temporal (BUG-005)\",\n  \"email\": \"operario.bug005.{{runId}}@tottalstore.com\",\n  \"password\": \"clave123\",\n  \"rol\": \"OPERARIO\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 201', () => pm.response.to.have.status(201));",
+                      "pm.collectionVariables.set('usuarioIdTemporal', pm.response.json().id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "BUG-005 Login del operario temporal",
+              "request": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{baseUrl}}/auth/login",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "login"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"operario.bug005.{{runId}}@tottalstore.com\",\n  \"password\": \"clave123\"\n}"
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.collectionVariables.set('tokenTemporal', pm.response.json().token);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "BUG-005 Desactivar al operario",
+              "request": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{baseUrl}}/usuarios/{{usuarioIdTemporal}}/desactivar",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "usuarios",
+                    "{{usuarioIdTemporal}}",
+                    "desactivar"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 2xx', () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "BUG-005 Su token vigente ya no da acceso",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/facturas",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "facturas"
+                  ]
+                },
+                "header": [],
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenTemporal}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('acceso rechazado (401/403)', () => pm.expect(pm.response.code).to.be.oneOf([401, 403]));"
                     ]
                   }
                 }

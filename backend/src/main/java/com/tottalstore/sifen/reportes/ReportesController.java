@@ -1,7 +1,10 @@
 package com.tottalstore.sifen.reportes;
 
 import com.tottalstore.sifen.reportes.dto.HistorialClienteResponse;
+import com.tottalstore.sifen.registro.ExportadorRg90;
 import com.tottalstore.sifen.reportes.dto.LibroIvaResponse;
+import com.tottalstore.sifen.reportes.dto.LibroIvaResponse.TipoLibro;
+import com.tottalstore.sifen.reportes.dto.LiquidacionIvaResponse;
 import com.tottalstore.sifen.reportes.dto.ReporteRechazosResponse;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -14,7 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Reportes del Release 3: Libro IVA Ventas (M4), estadísticas de rechazo e historial por cliente. */
+/** Reportes del Release 3: Libros IVA Ventas y Compras (M4), liquidación, archivo RG 90, rechazos e historial por cliente. */
 @RestController
 @RequestMapping("/api/reportes")
 public class ReportesController {
@@ -26,33 +29,53 @@ public class ReportesController {
     private final LibroIvaExcelExporter excelExporter;
     private final LibroIvaPdfExporter pdfExporter;
     private final ReportesService reportesService;
+    private final ExportadorRg90 exportadorRg90;
 
     public ReportesController(
             LibroIvaService libroIvaService,
             LibroIvaExcelExporter excelExporter,
             LibroIvaPdfExporter pdfExporter,
-            ReportesService reportesService) {
+            ReportesService reportesService,
+            ExportadorRg90 exportadorRg90) {
         this.libroIvaService = libroIvaService;
         this.excelExporter = excelExporter;
         this.pdfExporter = pdfExporter;
         this.reportesService = reportesService;
+        this.exportadorRg90 = exportadorRg90;
     }
 
     /** @param periodo mes en formato {@code yyyy-MM}, por ejemplo {@code 2026-10}. */
     @GetMapping("/libro-iva")
-    public LibroIvaResponse libroIva(@RequestParam YearMonth periodo) {
-        return libroIvaService.generar(periodo);
+    public LibroIvaResponse libroIva(
+            @RequestParam YearMonth periodo, @RequestParam(defaultValue = "VENTAS") TipoLibro libro) {
+        return libroIvaService.generar(periodo, libro);
     }
 
     @GetMapping("/libro-iva/excel")
-    public ResponseEntity<byte[]> libroIvaExcel(@RequestParam YearMonth periodo) {
-        return archivo(excelExporter.exportar(libroIvaService.generar(periodo)), XLSX, "libro-iva-ventas-" + periodo + ".xlsx");
+    public ResponseEntity<byte[]> libroIvaExcel(
+            @RequestParam YearMonth periodo, @RequestParam(defaultValue = "VENTAS") TipoLibro libro) {
+        return archivo(excelExporter.exportar(libroIvaService.generar(periodo, libro)), XLSX,
+                libro.archivo() + "-" + periodo + ".xlsx");
     }
 
     @GetMapping("/libro-iva/pdf")
-    public ResponseEntity<byte[]> libroIvaPdf(@RequestParam YearMonth periodo) {
-        return archivo(pdfExporter.exportar(libroIvaService.generar(periodo)), MediaType.APPLICATION_PDF,
-                "libro-iva-ventas-" + periodo + ".pdf");
+    public ResponseEntity<byte[]> libroIvaPdf(
+            @RequestParam YearMonth periodo, @RequestParam(defaultValue = "VENTAS") TipoLibro libro) {
+        return archivo(pdfExporter.exportar(libroIvaService.generar(periodo, libro)), MediaType.APPLICATION_PDF,
+                libro.archivo() + "-" + periodo + ".pdf");
+    }
+
+    /** Débito fiscal menos crédito fiscal del mes (referencial para el Formulario 120). */
+    @GetMapping("/liquidacion-iva")
+    public LiquidacionIvaResponse liquidacionIva(@RequestParam YearMonth periodo) {
+        return libroIvaService.liquidacion(periodo);
+    }
+
+    /** ZIP para importar en Marangatu (RG 90/2021): compras y ventas no electrónicas del mes. */
+    @GetMapping("/registro-rg90")
+    public ResponseEntity<byte[]> registroRg90(@RequestParam YearMonth periodo) {
+        ExportadorRg90.Archivo archivo = exportadorRg90.exportar(periodo);
+        return archivo(archivo.contenido(), MediaType.parseMediaType("application/zip"), archivo.nombre());
     }
 
     @GetMapping("/rechazos")

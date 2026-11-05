@@ -12,6 +12,7 @@ import {
   UserCog,
   Users,
   X,
+  Receipt,
 } from "lucide-react";
 import { useState, type ElementType, type ReactNode } from "react";
 import { NavLink, Outlet } from "react-router-dom";
@@ -80,10 +81,11 @@ export function AppLayout() {
             {link("/facturas", "Facturas", FileText)}
             {link("/productos", "Productos", Package)}
             {link("/clientes", "Clientes", Users)}
+            {link("/comprobantes", "Compras y otros", Receipt)}
           </NavGroup>
 
           <NavGroup title="Reportes">
-            {link("/reportes/libro-iva", "Libro IVA", BookOpen)}
+            {link("/reportes/libro-iva", "Libros IVA", BookOpen)}
             {link("/reportes/rechazos", "Rechazos SIFEN", BarChart3)}
           </NavGroup>
 

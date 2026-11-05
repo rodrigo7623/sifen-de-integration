@@ -1,4 +1,4 @@
-import { CheckCircle2, Info, XCircle } from "lucide-react";
+import { CheckCircle2, Info, X, XCircle } from "lucide-react";
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 
 type ToastType = "success" | "error" | "info";
@@ -16,35 +16,60 @@ interface ToastContextValue {
 const ToastContext = createContext<ToastContextValue | undefined>(undefined);
 
 const ICONS: Record<ToastType, ReactNode> = {
-  success: <CheckCircle2 size={18} className="text-verde" />,
-  error: <XCircle size={18} className="text-rojo" />,
-  info: <Info size={18} className="text-azul" />,
+  success: <CheckCircle2 size={24} className="shrink-0 text-verde" />,
+  error: <XCircle size={24} className="shrink-0 text-rojo" />,
+  info: <Info size={24} className="shrink-0 text-azul" />,
 };
 
-const DURATION_MS = 4000;
+const BORDE: Record<ToastType, string> = {
+  success: "border-l-verde",
+  error: "border-l-rojo",
+  info: "border-l-azul",
+};
+
+/** Los errores quedan más tiempo en pantalla: suelen traer un mensaje que hay que leer completo. */
+const DURATION_MS: Record<ToastType, number> = {
+  success: 6000,
+  info: 8000,
+  error: 12000,
+};
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const showToast = useCallback((message: string, type: ToastType = "info") => {
-    const id = Date.now() + Math.random();
-    setToasts((prev) => [...prev, { id, type, message }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, DURATION_MS);
+  const cerrar = useCallback((id: number) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
+
+  const showToast = useCallback(
+    (message: string, type: ToastType = "info") => {
+      const id = Date.now() + Math.random();
+      setToasts((prev) => [...prev, { id, type, message }]);
+      setTimeout(() => cerrar(id), DURATION_MS[type]);
+    },
+    [cerrar],
+  );
 
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      <div className="fixed bottom-5 right-5 z-[100] flex flex-col gap-2">
+      <div className="fixed bottom-6 right-6 z-[100] flex w-[min(28rem,calc(100vw-3rem))] flex-col gap-3">
         {toasts.map((t) => (
           <div
             key={t.id}
-            className="flex items-center gap-2 rounded-lg bg-white px-4 py-3 text-sm shadow-modal"
+            role={t.type === "error" ? "alert" : "status"}
+            className={`flex items-start gap-3 rounded-lg border-l-4 ${BORDE[t.type]} bg-white px-5 py-4 text-base shadow-modal`}
           >
             {ICONS[t.type]}
-            {t.message}
+            <span className="flex-1 leading-snug">{t.message}</span>
+            <button
+              type="button"
+              onClick={() => cerrar(t.id)}
+              aria-label="Cerrar aviso"
+              className="rounded p-0.5 text-texto-suave hover:bg-slate-100 hover:text-texto"
+            >
+              <X size={18} />
+            </button>
           </div>
         ))}
       </div>

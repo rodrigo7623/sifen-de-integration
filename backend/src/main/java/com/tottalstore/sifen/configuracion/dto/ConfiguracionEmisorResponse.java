@@ -3,6 +3,8 @@ package com.tottalstore.sifen.configuracion.dto;
 import com.tottalstore.sifen.configuracion.ConfiguracionEmisor;
 import java.time.LocalDate;
 
+import java.util.List;
+
 public record ConfiguracionEmisorResponse(
         String razonSocial,
         String nombreFantasia,
@@ -25,7 +27,11 @@ public record ConfiguracionEmisorResponse(
         Integer tipoContribuyente,
         String timbradoNumero,
         LocalDate timbradoFechaInicio,
-        LocalDate timbradoFechaFin) {
+        LocalDate timbradoFechaFin,
+        List<Actividad> actividadesEconomicas) {
+
+    public record Actividad(String codigo, String descripcion, boolean principal) {
+    }
 
     public static ConfiguracionEmisorResponse from(ConfiguracionEmisor c) {
         return new ConfiguracionEmisorResponse(
@@ -50,6 +56,9 @@ public record ConfiguracionEmisorResponse(
                 c.getTipoContribuyente(),
                 c.getTimbradoNumero(),
                 c.getTimbradoFechaInicio(),
-                c.getTimbradoFechaFin());
+                c.getTimbradoFechaFin(),
+                c.actividadesOrdenadas().stream()
+                        .map(a -> new Actividad(a.getCodigo(), a.getDescripcion(), a.isPrincipal()))
+                        .toList());
     }
 }

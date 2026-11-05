@@ -11,4 +11,11 @@ import java.util.UUID;
 public interface EnviadorSifenService {
 
     RespuestaSifenResult enviar(UUID facturaId, String xmlFirmado, Ambiente ambiente);
+
+    /**
+     * Consulta un DE por su CDC ({@code siConsDE}). Aprobado si el SIFEN lo tiene; no aprobado y no
+     * {@code sinConfirmar} si el SIFEN responde que no existe (nunca lo recibió o lo rechazó);
+     * {@code sinConfirmar} si la consulta misma no tuvo respuesta.
+     */
+    RespuestaSifenResult consultarDe(UUID facturaId, String cdc, Ambiente ambiente);
 }

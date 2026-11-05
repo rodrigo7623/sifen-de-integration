@@ -30,15 +30,26 @@ import com.tottalstore.sifen.sifen.RespuestaSifenRepository;
 import com.tottalstore.sifen.sifen.RespuestaSifenResult;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /** Emisión manual de facturas: borrador, cálculo de IVA/totales y confirmación (RF-11 a RF-17, CU-02). */
 @Service
 public class FacturaService {
+
+    private static final Logger log = LoggerFactory.getLogger(FacturaService.class);
+
+    /**
+     * Manual Técnico v150, 6.2: el DE se transmite al SIFEN dentro de las 72 h siguientes a su firma
+     * (dFecFirma). La firma se hace al confirmar, en el mismo momento que se fija fechaEmision.
+     */
+    public static final Duration PLAZO_TRANSMISION = Duration.ofHours(72);
 
     private final FacturaRepository facturaRepository;
     private final ClienteRepository clienteRepository;
@@ -250,7 +261,9 @@ public class FacturaService {
 
     @Transactional
     public FacturaElectronica confirmarEnvio(UUID id) {
-        FacturaElectronica factura = obtener(id);
+        // BUG-004: con la fila bloqueada, una segunda confirmación simultánea espera a que esta
+        // termine y ya no encuentra el BORRADOR, así que no puede mandar el DE otra vez.
+        FacturaElectronica factura = obtenerParaActualizar(id);
         exigirEstado(factura, EstadoDte.BORRADOR, "confirmar y enviar");
 
         // CU-05: validación de campos críticos antes del envío (flujo alternativo 3a de CU-01/CU-02).
@@ -272,7 +285,42 @@ public class FacturaService {
         // CU-04: envío al SIFEN (ver EnviadorSifenService).
         factura.setEstadoDte(EstadoDte.ENVIADO_SIFEN);
         RespuestaSifenResult resultado = enviadorSifenService.enviar(factura.getId(), firmado.xmlFirmado(), ambiente);
+        return registrarResultado(factura, resultado, firmado.xmlFirmado(), ambiente, true);
+    }
 
+    /**
+     * BUG-006: un DE que quedó EN_PROCESO (el SIFEN no respondió) se consulta por su CDC antes de
+     * hacer nada. Si el SIFEN lo tiene, quedó aprobado; si no lo tiene, se reenvía el mismo XML
+     * firmado, con el mismo número y CDC, así que no puede quedar duplicado.
+     */
+    @Transactional
+    public FacturaElectronica verificarEnvio(UUID id) {
+        FacturaElectronica factura = obtenerParaActualizar(id);
+        exigirEstado(factura, EstadoDte.EN_PROCESO, "verificar en el SIFEN");
+
+        Ambiente ambiente = ambienteActual();
+        String xmlFirmado = factura.getRespuestaSifen().getXmlFirmado();
+        RespuestaSifenResult consulta = enviadorSifenService.consultarDe(factura.getId(), factura.cdcVigente(), ambiente);
+        if (consulta.aprobado() || consulta.sinConfirmar()) {
+            return registrarResultado(factura, consulta, xmlFirmado, ambiente, false);
+        }
+        // El SIFEN no lo tiene. Pasadas las 72 h desde la firma ya no se puede transmitir ese XML: se
+        // da por rechazado (sin reenviar) para que se reabra y se vuelva a firmar con fecha nueva.
+        Instant vence = factura.getFechaEmision().plus(PLAZO_TRANSMISION);
+        if (Instant.now().isAfter(vence)) {
+            RespuestaSifenResult vencido = new RespuestaSifenResult(false, "PLAZO_VENCIDO",
+                    "El SIFEN no tiene este documento y pasaron más de 72 h desde su firma (Manual Técnico 6.2), "
+                            + "así que ya no se puede transmitir. Reabrilo y volvé a confirmarlo: se firma de nuevo.",
+                    null);
+            return registrarResultado(factura, vencido, xmlFirmado, ambiente, false);
+        }
+        RespuestaSifenResult reenvio = enviadorSifenService.enviar(factura.getId(), xmlFirmado, ambiente);
+        return registrarResultado(factura, reenvio, xmlFirmado, ambiente, true);
+    }
+
+    /** Guarda la respuesta del SIFEN y deja el DE aprobado, rechazado o, si no se sabe, EN_PROCESO. */
+    private FacturaElectronica registrarResultado(
+            FacturaElectronica factura, RespuestaSifenResult resultado, String xmlFirmado, Ambiente ambiente, boolean esEnvio) {
         // Si esta factura ya fue rechazada antes (reabrir → editar → confirmar de nuevo), ya existe
         // una fila en respuesta_sifen (factura_id es unique): hay que actualizarla, no insertar otra.
         RespuestaSifen respuesta = factura.getRespuestaSifen() != null ? factura.getRespuestaSifen() : new RespuestaSifen();
@@ -280,26 +328,35 @@ public class FacturaService {
         respuesta.setCodigo(resultado.codigo());
         respuesta.setDescripcion(resultado.descripcion());
         respuesta.setCdc(resultado.cdc());
-        respuesta.setXmlFirmado(firmado.xmlFirmado());
+        respuesta.setXmlFirmado(xmlFirmado);
         respuestaSifenRepository.save(respuesta);
         // Lado inverso del OneToOne: sin esto, la factura devuelta en esta misma request todavía no
         // "ve" la respuesta que se acaba de guardar (JPA no sincroniza el lado mappedBy en memoria).
         factura.setRespuestaSifen(respuesta);
 
         // Historial de intentos para las estadísticas de rechazo (respuesta_sifen solo guarda el último).
-        IntentoEnvioSifen intento = new IntentoEnvioSifen();
-        intento.setFactura(factura);
-        intento.setAmbiente(ambiente);
-        intento.setAprobado(resultado.aprobado());
-        intento.setCodigo(resultado.codigo());
-        intento.setDescripcion(resultado.descripcion());
-        intentoEnvioSifenRepository.save(intento);
+        // Una consulta por CDC no es un envío: no cuenta como intento.
+        if (esEnvio) {
+            IntentoEnvioSifen intento = new IntentoEnvioSifen();
+            intento.setFactura(factura);
+            intento.setAmbiente(ambiente);
+            intento.setAprobado(resultado.aprobado());
+            intento.setCodigo(resultado.codigo());
+            intento.setDescripcion(resultado.descripcion());
+            intentoEnvioSifenRepository.save(intento);
+        }
 
-        factura.setEstadoDte(resultado.aprobado() ? EstadoDte.APROBADO : EstadoDte.RECHAZADO);
+        EstadoDte estado = resultado.aprobado() ? EstadoDte.APROBADO
+                : resultado.sinConfirmar() ? EstadoDte.EN_PROCESO : EstadoDte.RECHAZADO;
+        factura.setEstadoDte(estado);
         FacturaElectronica guardada = facturaRepository.save(factura);
 
-        auditoriaService.registrar(
-                resultado.aprobado() ? "APROBADO_SIFEN" : "RECHAZADO_SIFEN", currentUser.obtener(), guardada);
+        String accion = switch (estado) {
+            case APROBADO -> "APROBADO_SIFEN";
+            case EN_PROCESO -> "ENVIO_SIN_CONFIRMAR";
+            default -> "RECHAZADO_SIFEN";
+        };
+        auditoriaService.registrar(accion, currentUser.obtener(), guardada);
 
         if (resultado.aprobado()) {
             if (guardada.getTipoDoc() == TipoDocumento.NC) {
@@ -310,14 +367,52 @@ public class FacturaService {
         return guardada;
     }
 
-    /** RF-09: envío del PDF+XML de la factura aprobada al correo del cliente (stub, ver EnviadorEmailService). */
+    /**
+     * RF-09: envío del PDF+XML de la factura aprobada al correo del cliente (stub, ver
+     * EnviadorEmailService). BUG-001: el DE ya está aprobado por el SIFEN, así que una falla del
+     * correo no puede revertir la transacción: queda emailEnviado=false y se registra en la auditoría.
+     */
     private void enviarPorCorreo(FacturaElectronica factura) {
-        byte[] pdf = facturaPdfGenerator.generar(factura);
-        String xml = factura.getRespuestaSifen().getXmlFirmado();
-        enviadorEmailService.enviar(factura, pdf, xml);
+        String email = factura.getCliente() != null ? factura.getCliente().getEmail() : null;
+        if (email == null || email.isBlank()) {
+            // No es una falla: el cliente no dejó email. Queda registrado y se puede reenviar después.
+            auditoriaService.registrar("EMAIL_SIN_DESTINATARIO", currentUser.obtener(), factura);
+            return;
+        }
+        try {
+            byte[] pdf = facturaPdfGenerator.generar(factura);
+            String xml = factura.getRespuestaSifen().getXmlFirmado();
+            enviadorEmailService.enviar(factura, pdf, xml);
+        } catch (RuntimeException e) {
+            log.warn("No se pudo enviar por correo el documento {} aprobado por el SIFEN", factura.getId(), e);
+            auditoriaService.registrar("EMAIL_FALLIDO", currentUser.obtener(), factura);
+            return;
+        }
         factura.setEmailEnviado(true);
         facturaRepository.save(factura);
         auditoriaService.registrar("EMAIL_ENVIADO", currentUser.obtener(), factura);
+    }
+
+    /** RF-09: reenvío manual del correo de un documento aprobado. */
+    @Transactional
+    public FacturaElectronica reenviarCorreo(UUID id) {
+        FacturaElectronica factura = obtener(id);
+        if (factura.getEstadoDte() != EstadoDte.APROBADO && factura.getEstadoDte() != EstadoDte.ANULADO) {
+            throw new BusinessException("Solo se envía por correo un documento aprobado por el SIFEN");
+        }
+        String email = factura.getCliente() != null ? factura.getCliente().getEmail() : null;
+        if (email == null || email.isBlank()) {
+            throw new BusinessException("El cliente " + factura.getCliente().getRazonSocial()
+                    + " no tiene email registrado: cargalo en Clientes y volvé a intentar");
+        }
+        boolean antes = factura.isEmailEnviado();
+        factura.setEmailEnviado(false);
+        enviarPorCorreo(factura);
+        if (!factura.isEmailEnviado()) {
+            factura.setEmailEnviado(antes);
+            throw new BusinessException("No se pudo enviar el correo a " + email + ". Revisá la configuración del correo (ver el log del servidor)");
+        }
+        return factura;
     }
 
     /**
@@ -337,6 +432,11 @@ public class FacturaService {
 
     public FacturaElectronica obtener(UUID id) {
         return facturaRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Factura no encontrada: " + id));
+    }
+
+    private FacturaElectronica obtenerParaActualizar(UUID id) {
+        return facturaRepository.findByIdParaActualizar(id)
                 .orElseThrow(() -> new NotFoundException("Factura no encontrada: " + id));
     }
 

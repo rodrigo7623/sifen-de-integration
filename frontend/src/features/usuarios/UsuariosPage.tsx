@@ -31,6 +31,7 @@ export function UsuariosPage() {
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [form, setForm] = useState<UsuarioCrearInput>(FORM_VACIO);
+  const [activo, setActivo] = useState(true);
   const [errorFormulario, setErrorFormulario] = useState<string | null>(null);
 
   async function cargar(q?: string) {
@@ -60,6 +61,7 @@ export function UsuariosPage() {
   function abrirEdicion(u: Usuario) {
     setEditandoId(u.id);
     setForm({ nombre: u.nombre, email: u.email, password: "", rol: u.rol });
+    setActivo(u.activo);
     setErrorFormulario(null);
     setMostrarFormulario(true);
   }
@@ -73,6 +75,7 @@ export function UsuariosPage() {
           nombre: form.nombre,
           rol: form.rol,
           password: form.password.trim() === "" ? null : form.password,
+          activo,
         };
         await usuariosApi.editar(editandoId, input);
       } else {
@@ -172,6 +175,7 @@ export function UsuariosPage() {
               <input
                 value={form.nombre}
                 onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+                maxLength={150}
                 required
               />
             </FormField>
@@ -182,6 +186,7 @@ export function UsuariosPage() {
                 value={form.email}
                 disabled={!!editandoId}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
+                maxLength={150}
                 required
               />
             </FormField>
@@ -194,6 +199,7 @@ export function UsuariosPage() {
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
                 minLength={6}
+                maxLength={72}
                 required={!editandoId}
               />
             </FormField>
@@ -207,6 +213,18 @@ export function UsuariosPage() {
                 ))}
               </select>
             </FormField>
+
+            {editandoId && (
+              <label className="mb-3 flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="w-auto"
+                  checked={activo}
+                  onChange={(e) => setActivo(e.target.checked)}
+                />
+                Activo (puede iniciar sesión)
+              </label>
+            )}
 
             {errorFormulario && <p className="mb-2 text-sm text-rojo">{errorFormulario}</p>}
 

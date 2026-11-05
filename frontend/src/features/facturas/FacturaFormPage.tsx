@@ -1,5 +1,5 @@
-import { Download, FileCode2, FileMinus2, Mail, Plus, RotateCcw, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Download, FileCode2, FileMinus2, Plus, RotateCcw, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { extraerMensajeError } from "../../api/client";
 import {
@@ -18,13 +18,17 @@ import { BuscarClientePorRuc } from "../clientes/BuscarClientePorRuc";
 import type { Cliente, Establecimiento } from "../../api/types";
 import { productosApi } from "../catalogo/api";
 import type { Producto } from "../../api/types";
+import { BuscadorProducto } from "../catalogo/BuscadorProducto";
 import { establecimientosApi } from "../establecimientos/api";
+import { MontoInput } from "../../components/ui/MontoInput";
+import { EstadoCorreo } from "./EstadoCorreo";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
 import { useToast } from "../../components/ui/ToastProvider";
 import { descargarArchivo, facturasApi, nombreArchivo, type FacturaInput, type ItemFacturaInput } from "./api";
 import { calcularTotales, subtotalItem } from "./totales";
+import { resultadoEnvio, VerificarEnvioAviso } from "./VerificarEnvioAviso";
 
 interface FilaItem extends ItemFacturaInput {
   localId: string;
@@ -41,10 +45,34 @@ function nuevaFilaVacia(): FilaItem {
   };
 }
 
+/** Representación comparable del borrador, para saber si cambió desde la última vez que se guardó. */
+function firma(input: FacturaInput): string {
+  return JSON.stringify(input);
+}
+
+function firmaDe(factura: Factura): string {
+  const credito = factura.condicionPago === "CREDITO";
+  return firma({
+    clienteRuc: factura.clienteRuc,
+    establecimientoId: factura.establecimientoId,
+    puntoExpedicionId: factura.puntoExpedicionId,
+    condicionPago: factura.condicionPago ?? "CONTADO",
+    plazoDias: credito ? (factura.plazoDias ?? null) : null,
+    cantidadCuotas: credito ? (factura.cantidadCuotas ?? null) : null,
+    items: factura.items.map((i) => ({
+      productoCodigo: i.productoCodigo,
+      descripcion: i.descripcion,
+      cantidad: i.cantidad,
+      precioUnitario: i.precioUnitario,
+      tasaIva: i.tasaIva,
+    })),
+  });
+}
+
 function badgeTone(estado: EstadoDte): "ok" | "off" | "warn" | "info" {
   if (estado === "APROBADO") return "ok";
   if (estado === "RECHAZADO") return "off";
-  if (estado === "ANULADO") return "warn";
+  if (estado === "ANULADO" || estado === "EN_PROCESO") return "warn";
   return "info";
 }
 
@@ -57,7 +85,6 @@ export function FacturaFormPage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
   const [establecimientos, setEstablecimientos] = useState<Establecimiento[]>([]);
-  const [productoParaAgregar, setProductoParaAgregar] = useState("");
 
   const [clienteRuc, setClienteRuc] = useState("");
   const [establecimientoId, setEstablecimientoId] = useState("");
@@ -76,7 +103,11 @@ export function FacturaFormPage() {
   const [puntoExpedicionTexto, setPuntoExpedicionTexto] = useState<string | null>(null);
   const [motivoRechazo, setMotivoRechazo] = useState<string | null>(null);
   const [emailEnviado, setEmailEnviado] = useState(false);
+  const [fechaEmision, setFechaEmision] = useState<string | null>(null);
+  const [clienteEmail, setClienteEmail] = useState<string | null>(null);
   const [notas, setNotas] = useState<Factura[]>([]);
+  /** Lo último guardado (o cargado) del borrador: si el formulario no cambió, no hay nada que guardar. */
+  const [guardadoComo, setGuardadoComo] = useState<string | null>(null);
 
   const [cargando, setCargando] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -139,6 +170,8 @@ export function FacturaFormPage() {
     setCantidadCuotas(factura.cantidadCuotas ?? "");
     setMotivoRechazo(factura.motivoRechazo);
     setEmailEnviado(factura.emailEnviado);
+    setFechaEmision(factura.fechaEmision);
+    setClienteEmail(factura.clienteEmail);
     setItems(
       factura.items.map((item) => ({
         localId: crypto.randomUUID(),
@@ -163,6 +196,7 @@ export function FacturaFormPage() {
           return;
         }
         cargarDesdeFactura(factura);
+        setGuardadoComo(firmaDe(factura));
         return facturasApi.notas(factura.id).then(setNotas);
       })
       .catch((err) => setError(extraerMensajeError(err, "No se pudo cargar la factura")))
@@ -170,9 +204,7 @@ export function FacturaFormPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  function agregarDesdeCatalogo() {
-    const producto = productos.find((p) => p.codigo === productoParaAgregar);
-    if (!producto) return;
+  function agregarDesdeCatalogo(producto: Producto) {
     setItems((prev) => [
       ...prev,
       {
@@ -184,7 +216,6 @@ export function FacturaFormPage() {
         tasaIva: producto.tasaIva,
       },
     ]);
-    setProductoParaAgregar("");
   }
 
   function agregarAdHoc() {
@@ -211,6 +242,12 @@ export function FacturaFormPage() {
     };
   }
 
+  const hayCambios = useMemo(
+    () => guardadoComo === null || firma(armarInput()) !== guardadoComo,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [guardadoComo, clienteRuc, establecimientoId, puntoExpedicionId, condicionPago, plazoDias, cantidadCuotas, items],
+  );
+
   async function guardarBorrador() {
     setError(null);
     if (!clienteRuc) {
@@ -234,6 +271,7 @@ export function FacturaFormPage() {
       setNumero(factura.numero);
       setCdc(factura.cdc);
       setClienteRazonSocial(factura.clienteRazonSocial);
+      setGuardadoComo(firma(input));
       showToast("Borrador guardado", "success");
       if (!id) {
         navigate(`/facturas/${factura.id}`, { replace: true });
@@ -252,20 +290,23 @@ export function FacturaFormPage() {
     setConfirmando(true);
     try {
       const factura = await facturasApi.confirmar(facturaId);
-      setEstadoDte(factura.estadoDte);
-      setNumero(factura.numero);
-      setCdc(factura.cdc);
-      setMotivoRechazo(factura.motivoRechazo);
-      setEmailEnviado(factura.emailEnviado);
-      showToast(
-        factura.estadoDte === "APROBADO" ? "Factura aprobada por el SIFEN" : "Factura rechazada por el SIFEN",
-        factura.estadoDte === "APROBADO" ? "success" : "error",
-      );
+      aplicarEstadoSifen(factura);
+      showToast(...resultadoEnvio(factura, "Factura"));
     } catch (err) {
       setError(extraerMensajeError(err, "No se pudo confirmar el envío"));
     } finally {
       setConfirmando(false);
     }
+  }
+
+  function aplicarEstadoSifen(factura: Factura) {
+    setEstadoDte(factura.estadoDte);
+    setFechaEmision(factura.fechaEmision);
+    setClienteEmail(factura.clienteEmail);
+    setNumero(factura.numero);
+    setCdc(factura.cdc);
+    setMotivoRechazo(factura.motivoRechazo);
+    setEmailEnviado(factura.emailEnviado);
   }
 
   async function reabrir() {
@@ -317,10 +358,11 @@ export function FacturaFormPage() {
         <p className="mb-3 flex items-center gap-2 text-sm">
           Estado: <Badge tone={badgeTone(estadoDte)}>{ESTADO_DTE_LABEL[estadoDte]}</Badge>
           {cdc && <span className="font-mono text-xs text-texto-suave">CDC {cdc}</span>}
-          {emailEnviado && (
-            <span className="inline-flex items-center gap-1 text-xs text-texto-suave">
-              <Mail size={12} /> Enviada por correo al cliente
-            </span>
+          {facturaId && (
+            <EstadoCorreo
+              documento={{ id: facturaId, estadoDte, emailEnviado, clienteEmail }}
+              onActualizado={aplicarEstadoSifen}
+            />
           )}
         </p>
       )}
@@ -332,6 +374,13 @@ export function FacturaFormPage() {
             {reabriendo ? "Reabriendo…" : "Reabrir para corregir"}
           </Button>
         </div>
+      )}
+
+      {facturaId && estadoDte === "EN_PROCESO" && (
+        <VerificarEnvioAviso documento={{ id: facturaId }} motivo={motivoRechazo}
+          firmadoEl={fechaEmision}
+          onVerificado={aplicarEstadoSifen}
+        />
       )}
 
       {facturaId && (estadoDte === "APROBADO" || estadoDte === "ANULADO" || notas.length > 0) && (
@@ -449,26 +498,7 @@ export function FacturaFormPage() {
 
         {esBorrador && (
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <select
-              className="max-w-xs"
-              value={productoParaAgregar}
-              onChange={(e) => setProductoParaAgregar(e.target.value)}
-            >
-              <option value="">Elegir producto del catálogo…</option>
-              {productos.map((p) => (
-                <option key={p.codigo} value={p.codigo}>
-                  {p.descripcion} ({p.codigo})
-                </option>
-              ))}
-            </select>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={agregarDesdeCatalogo}
-              disabled={!productoParaAgregar}
-            >
-              Agregar desde catálogo
-            </Button>
+            <BuscadorProducto productos={productos} onElegir={agregarDesdeCatalogo} />
             <Button type="button" variant="secondary" icon={<Plus size={16} />} onClick={agregarAdHoc}>
               Ítem manual
             </Button>
@@ -513,13 +543,9 @@ export function FacturaFormPage() {
                     />
                   </td>
                   <td className="px-3.5 py-2.5">
-                    <input
-                      type="number"
-                      min={0}
+                    <MontoInput
                       value={item.precioUnitario}
-                      onChange={(e) =>
-                        actualizarItem(item.localId, { precioUnitario: Number(e.target.value) })
-                      }
+                      onChange={(v) => actualizarItem(item.localId, { precioUnitario: v ?? 0 })}
                     />
                   </td>
                   <td className="px-3.5 py-2.5">
@@ -632,12 +658,21 @@ export function FacturaFormPage() {
 
       <div className="flex justify-end gap-2">
         {esBorrador && (
-          <Button variant="secondary" onClick={guardarBorrador} disabled={guardando}>
-            {guardando ? "Guardando…" : "Guardar borrador"}
+          <Button
+            variant="secondary"
+            onClick={guardarBorrador}
+            disabled={guardando || !hayCambios}
+            title={hayCambios ? undefined : "No hay cambios sin guardar"}
+          >
+            {guardando ? "Guardando…" : hayCambios ? "Guardar borrador" : "Borrador guardado"}
           </Button>
         )}
         {facturaId && esBorrador && (
-          <Button onClick={confirmarEnvio} disabled={confirmando}>
+          <Button
+            onClick={confirmarEnvio}
+            disabled={confirmando || hayCambios}
+            title={hayCambios ? "Guardá el borrador antes de enviarlo: se envía lo guardado" : undefined}
+          >
             {confirmando ? "Enviando…" : "Confirmar y enviar al SIFEN"}
           </Button>
         )}

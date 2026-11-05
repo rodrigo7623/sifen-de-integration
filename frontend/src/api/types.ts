@@ -179,6 +179,8 @@ export interface Factura {
   facturaAsociadaNumero: string | null;
   facturaAsociadaCdc: string | null;
   facturaAsociadaTotal: number | null;
+  /** RF-09: a dónde se manda el documento aprobado; null si el cliente no tiene email. */
+  clienteEmail: string | null;
 }
 
 export interface RechazoResumen {
@@ -200,7 +202,16 @@ export interface AuditoriaEntrada {
   operacion: string;
   fechaHora: string;
   usuarioNombre: string | null;
+  usuarioEmail: string | null;
+  usuarioRol: Rol | null;
   facturaId: string | null;
+  documentoTipo: TipoDocumento | null;
+  documentoNumero: string | null;
+  /** Estado actual del documento (no el que tenía al registrarse la operación). */
+  documentoEstado: EstadoDte | null;
+  clienteRuc: string | null;
+  clienteRazonSocial: string | null;
+  documentoTotal: number | null;
 }
 
 export interface PaginaSpring<T> {
@@ -234,18 +245,35 @@ export interface ConfiguracionEmisor {
   timbradoNumero: string | null;
   timbradoFechaInicio: string | null;
   timbradoFechaFin: string | null;
+  /** D2.1 gActEco: hasta 9, exactamente una principal. */
+  actividadesEconomicas: ActividadEconomica[];
 }
 
+export interface ActividadEconomica {
+  codigo: string;
+  descripcion: string;
+  principal: boolean;
+}
+
+export type TipoLibro = "VENTAS" | "COMPRAS";
+
+/** SIFEN = DE propio aprobado; REGISTRADO = comprobante cargado a mano; DE_RECIBIDO = compra con CDC. */
+export type OrigenRenglon = "SIFEN" | "REGISTRADO" | "DE_RECIBIDO";
+
 export interface RenglonLibroIva {
-  facturaId: string;
+  facturaId: string | null;
+  comprobanteRegistradoId: string | null;
+  origen: OrigenRenglon;
   fecha: string;
   tipoComprobante: string;
+  sigla: string;
   numero: string;
   timbrado: string | null;
   cdc: string | null;
-  clienteRuc: string;
-  clienteRazonSocial: string;
+  ruc: string;
+  razonSocial: string;
   condicion: string;
+  documentoAsociado: string | null;
   gravado10: number;
   iva10: number;
   gravado5: number;
@@ -254,7 +282,89 @@ export interface RenglonLibroIva {
   total: number;
 }
 
+export interface LiquidacionIva {
+  periodo: string;
+  comprobantesVenta: number;
+  totalVentas: number;
+  debitoFiscal10: number;
+  debitoFiscal5: number;
+  debitoFiscal: number;
+  comprobantesCompra: number;
+  totalCompras: number;
+  creditoFiscal10: number;
+  creditoFiscal5: number;
+  creditoFiscal: number;
+  saldo: number;
+  comprobantesParaRg90: number;
+  comprobantesElectronicosExcluidos: number;
+}
+
+export type TipoRegistro = "VENTA" | "COMPRA";
+
+export interface TipoComprobanteRg90 {
+  valor: string;
+  codigo: number;
+  descripcion: string;
+  sigla: string;
+  ventas: boolean;
+  compras: boolean;
+  soloTotalEnCompras: boolean;
+  numeroOpcional: boolean;
+  sinTimbrado: boolean;
+  esNota: boolean;
+  exigeRucEnCompras: boolean;
+}
+
+export interface TipoIdentificacionRg90 {
+  valor: string;
+  codigo: number;
+  descripcion: string;
+  nombreOpcional: boolean;
+}
+
+export interface CatalogoRg90 {
+  tiposComprobante: TipoComprobanteRg90[];
+  tiposIdentificacion: TipoIdentificacionRg90[];
+}
+
+export interface ComprobanteRegistradoInput {
+  tipoRegistro: TipoRegistro;
+  tipoComprobante: string;
+  fechaEmision: string;
+  tipoIdentificacion: string;
+  identificacion: string;
+  razonSocial: string | null;
+  timbrado: string | null;
+  numero: string | null;
+  cdc: string | null;
+  condicion: "CONTADO" | "CREDITO";
+  monedaExtranjera: boolean;
+  gravado10: number;
+  gravado5: number;
+  exento: number;
+  total: number;
+  imputaIva: boolean;
+  imputaIre: boolean;
+  imputaIrp: boolean;
+  noImputa: boolean;
+  asociadoNumero: string | null;
+  asociadoTimbrado: string | null;
+  observacion: string | null;
+}
+
+export interface ComprobanteRegistrado extends ComprobanteRegistradoInput {
+  id: string;
+  tipoComprobanteDescripcion: string;
+  electronico: boolean;
+  iva10: number;
+  iva5: number;
+  creadoPor: string | null;
+  modificadoPor: string | null;
+  updatedAt: string;
+}
+
 export interface LibroIva {
+  libro: TipoLibro;
   periodo: string;
   emisorRuc: string | null;
   emisorRazonSocial: string | null;

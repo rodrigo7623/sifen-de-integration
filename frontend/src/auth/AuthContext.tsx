@@ -1,5 +1,5 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import { apiClient, TOKEN_STORAGE_KEY } from "../api/client";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { apiClient, SESION_VENCIDA_EVENTO, SESION_VENCIDA_AVISO_KEY, TOKEN_STORAGE_KEY } from "../api/client";
 
 interface Usuario {
   nombre: string;
@@ -30,6 +30,17 @@ function leerUsuarioGuardado(): Usuario | null {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [usuario, setUsuario] = useState<Usuario | null>(leerUsuarioGuardado);
 
+  // BUG-010: el interceptor de apiClient avisa cuando el backend responde 401 (token vencido).
+  useEffect(() => {
+    function alVencer() {
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      localStorage.removeItem(USER_STORAGE_KEY);
+      setUsuario(null);
+    }
+    window.addEventListener(SESION_VENCIDA_EVENTO, alVencer);
+    return () => window.removeEventListener(SESION_VENCIDA_EVENTO, alVencer);
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       usuario,
@@ -38,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(TOKEN_STORAGE_KEY, data.token);
         const nuevoUsuario: Usuario = { nombre: data.nombre, email: data.email, rol: data.rol };
         localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(nuevoUsuario));
+        sessionStorage.removeItem(SESION_VENCIDA_AVISO_KEY);
         setUsuario(nuevoUsuario);
       },
       logout() {

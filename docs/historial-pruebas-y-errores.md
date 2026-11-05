@@ -76,6 +76,20 @@ para la documentación de implementación. Centraliza lo que antes estaba en
 | 02/11/2026 | R3 | Unitarias | `mvn test` con el reintento de `siConsRUC` ante `0160` (`ConsultaRucSifenServiceTest`: solo el HTTP 400 con `0160` se considera transitorio; el 302, un error de conexión o un `0500` no se reintentan) | 99 / 99 OK |
 | 02/11/2026 | R3 | Integración | Newman, colección completa contra un backend en modo stub en el puerto 8081 (esquema aislado `newman_r3`), corrida varias veces durante la grabación del video de pruebas | Una corrida con 4 fallos en *Establecimientos* (ver B6). Corregida la colección: **64 requests / 106 aserciones, 0 fallos** |
 | 02/11/2026 | R3 | Envío SIFEN real (video) | Grabación del video de módulos: alta de cliente con `siConsRUC`, factura y nota de crédito enviadas en vivo desde la interfaz | `siConsRUC` devolvió `0160` y el reintento automático obtuvo `0502` en el mismo pedido. Facturas `001-001-0000002` a `0000005` y NC `0000002` a `0000004` **aprobadas (0260)** en las distintas tomas |
+| 03/11/2026 | R3 | Unitarias | `mvn test` con las correcciones de BUG-001, 003, 004, 005 y 006: `FacturaServiceTest` (+7: una falla del correo no revierte la aprobación; la confirmación lee la factura con bloqueo de fila; sin respuesta del SIFEN el documento queda `EN_PROCESO` y no se puede reabrir; verificar aprueba sin reenviar si el SIFEN tiene el CDC, reenvía el mismo XML firmado si no lo tiene y deja `EN_PROCESO` si la consulta tampoco responde; no se verifica un documento que no está `EN_PROCESO`), `EnviadorSifenSoapServiceTest` (+6: un servidor local que acepta el envío y no contesta da "sin confirmar", un puerto cerrado da rechazo `ERROR_CONEXION`, sobre de `siConsDE`, códigos 0422/0420/otro), `ClienteServiceTest` (+2), `JwtAuthFilterTest` (3, nuevo) | **117 / 117 OK** |
+| 03/11/2026 | R3 | Build frontend | `tsc -b` con el aviso "Envío sin confirmar" y el botón *Verificar en el SIFEN* (detalle de factura y de nota, y en el listado) | OK |
+| 03/11/2026 | R3 | Regresión de defectos (stub) | Script HTTP (`verificar-bugs.js`) contra el backend real en modo stub y PostgreSQL (esquema aislado): 5 rondas de dos `confirmar` simultáneos sobre la misma factura, envío sin respuesta del SIFEN, cambio de RUC de un cliente, usuario desactivado con token vigente y carpeta de correo inutilizable. Para comprobar que el script detecta los defectos, se corrió también contra la versión anterior (`6253d7e`) | **Versión corregida: 13 / 13 OK**; cada documento llegó al SIFEN una sola vez (7 documentos, 7 envíos). **Versión anterior: 2 / 13**: los dos `confirmar` simultáneos llegaban al SIFEN y el segundo terminaba en 500 por `respuesta_sifen_factura_id_key`; cambiar el RUC creaba un cliente duplicado; el token del usuario desactivado seguía dando 200; la falla del correo devolvía 500 y la factura volvía a `BORRADOR` |
+| 03/11/2026 | R3 | Consulta SIFEN real | `siConsDE` (`GET /api/sifen/consulta-de/{cdc}`) contra el SIFEN de test con la FE `001-001-0000005`, la NC `001-001-0000004` y un CDC que nunca se envió | FE y NC → **`0422 CDC encontrado`**; CDC inexistente → **`0420 Documento No Existe en SIFEN o ha sido Rechazado`**. Confirma los códigos que usa la verificación de BUG-006 |
+| 03/11/2026 | R3 | Integración | Newman, colección completa con la nueva subcarpeta *Release 3 / Correcciones de defectos* (12 requests: BUG-006 sin respuesta → `EN_PROCESO` → no se reabre → *verificar* → aprobado con el mismo número; consulta por CDC; BUG-003; BUG-005 con un operario temporal) contra un backend en modo stub (esquema aislado) | 1.ª corrida: 4 fallos, 2 por los datos precargados que faltan en un esquema nuevo (ya conocido, ver la fila del 02/11) y 2 en la consulta por CDC porque en modo stub la factura no tiene CDC propio: el caso pasó a usar el CDC de una FE aprobada por el SIFEN de test. **76 requests / 125 aserciones, 0 fallos** |
+| 05/11/2026 | R3 | Unitarias | `mvn test` con la tanda de ajustes pedida por el usuario (BUG-014 a BUG-022): `ConfiguracionEmisorServiceTest` (+5, actividades económicas: principal única, cambio de principal reutilizando filas, repetidas, compatibilidad con el par código/descripción), `GeneradorDteSifenTest` (+1, un `gActEco` por actividad con la principal primero), `FacturaServiceTest` (+6: 72 h desde la firma en *verificar*, cliente sin email, reenvío del correo), `EnviadorEmailSmtpTest` (5, nuevo: correo con número de comprobante, adjuntos PDF/XML, falla del SMTP, arranque sin servidor), `LibroIvaPdfExporterTest` (4, nuevo), `AuditoriaControllerTest` (rehecho para los filtros) | 1.ª corrida: 1 falla en `CifradoSecretosTest`, ajena a los cambios (ver B7). Después: **139 / 139 OK** |
+| 05/11/2026 | R3 | Build frontend | `tsc -b` + `vite build` con el modal sin cierre por clic afuera, alertas, `MontoInput`, buscador de productos, botón de borrador según cambios, "Activo" en las ediciones, configuración con varias actividades, filtros de auditoría y estado del correo | OK |
+| 05/11/2026 | R3 | Integración | Newman, colección completa contra un backend en modo stub (esquema aislado `mejoras_newman`, con el producto y el cliente semilla cargados por API) | **76 requests / 125 aserciones, 0 fallos** (la colección no necesitó cambios: los requests aceptan `activo` como opcional) |
+| 05/11/2026 | R3 | Funcional por HTTP (stub) | Script `http-mejoras.js`: reactivar producto, cliente y establecimiento desde *Editar*; producto con código y descripción largos; establecimiento con códigos numéricos; factura de un cliente sin email → reenviar → cargar email → reenviar; un admin desactivándose a sí mismo; dos actividades económicas, cambio de principal, sin principal; configuración con timbrado y departamento no numéricos | 14 / 14 OK después de corregir BUG-022 (la última verificación devolvía el 400 genérico de la base en vez de los mensajes por campo) |
+| 05/11/2026 | R3 | Funcional contra la app (modo real) | Libro IVA Ventas de noviembre en PDF; alta de establecimiento con `CENTRAL` como código de departamento y un email inválido; auditoría filtrada por `001-001-0000005` y con rango de fechas invertido; migración V9 sobre la base local | PDF con tipo, timbrado y documento asociado separados y "Página 1 de 1"; establecimiento → **400** con los tres mensajes (antes 500); auditoría → 6 registros con número, cliente y estado, y 400 "La fecha 'hasta' no puede ser anterior a 'desde'"; V9 aplicada: la actividad 47890 pasó a la tabla nueva como principal |
+| 05/11/2026 | R3 | Unitarias | `mvn test` tras corregir BUG-010/011 y agregar Libro IVA Compras, liquidación y archivo RG 90: `UsuarioServiceTest` (+4), `ComprobanteRegistradoServiceTest` (9: IVA incluido, total = suma, ticket de compra solo total, todos los errores juntos, DV del RUC, autofactura/despacho, ventas electrónicas no se cargan, duplicado, fecha mínima 2021), `ExportadorRg90Test` (6: orden de columnas igual al ejemplo de la Especificación, NC de venta en positivo con asociado, tabuladores en la razón social, nombre del ZIP = TXT y exclusión de DE, lotes de 5.000, período vacío) y `LibroIvaServiceTest` (+3: libro compras solo IVA con NC que resta, ventas preimpresas + SIFEN, liquidación) | **161 / 161 OK**. Primer intento: 1 error del propio test (ver B8) |
+| 05/11/2026 | R3 | Integración local (modo real) | Migración `V10__registro_comprobantes_rg90` y script `http-rg90.js` (23 verificaciones): BUG-010, BUG-011, catálogo RG 90, alta/duplicado/validaciones de compras, compra con CDC, venta con ticket sin nombre, Libro IVA Compras y Ventas, liquidación, Excel y PDF del libro de compras, ZIP RG 90 y borrado de lo creado | **23 / 23 OK**. V10 aplicada en 0,08 s. Primer intento 22/23 por una aserción mal planteada (ver B9). El ZIP `4309652_REG_112026_T0001.zip` contiene un TXT con 2 filas (venta de 19 campos, compra de 20) y deja fuera la compra con CDC |
+| 05/11/2026 | R3 | Visual | PDF del Libro IVA Compras renderizado a PNG | OK: título, "RUC prov."/"Proveedor", siglas FAC, totales y "IVA crédito fiscal del período" |
+| 05/11/2026 | R3 | Build frontend | `tsc -b` + `vite build` con la pantalla *Compras y otros comprobantes* y *Libros IVA* con pestañas Ventas / Compras / Liquidación y RG 90 | OK |
 
 ---
 
@@ -90,19 +104,28 @@ para la documentación de implementación. Centraliza lo que antes estaba en
 | A3 | R1 | Login de una cuenta desactivada devolvía 500 en vez de 401 | Media | Corregido |
 | A4 | R2 | 500 al reconfirmar una factura rechazada (unique en `respuesta_sifen.factura_id`) | Alta | Corregido |
 | C1 | R2 | 500 en `GET /api/auditoria` por `LazyInitializationException` en `LogAuditoria` | Alta | Corregido |
-| BUG-001 | R3 | Una falla del correo revierte una factura ya aprobada por el SIFEN | Alta | Abierto |
+| BUG-001 | R3 | Una falla del correo revierte una factura ya aprobada por el SIFEN | Alta | Corregido |
 | BUG-002 | R3 | `respuesta_sifen.descripcion` (250) se desborda en modo real | Alta | Corregido |
-| BUG-003 | R3 | Editar un cliente cambiando el RUC produce error 500 | Alta | Abierto |
-| BUG-004 | R3 | Doble confirmación concurrente envía la factura dos veces | Alta | Abierto |
-| BUG-005 | R3 | Usuario desactivado conserva acceso con su JWT vigente | Alta | Abierto |
-| BUG-006 | R3 | Timeout con el SIFEN se trata como rechazo y el reintento genera otro CDC | Media | Abierto |
+| BUG-003 | R3 | Editar un cliente cambiando el RUC produce error 500 | Alta | Corregido |
+| BUG-004 | R3 | Doble confirmación concurrente envía la factura dos veces | Alta | Corregido |
+| BUG-005 | R3 | Usuario desactivado conserva acceso con su JWT vigente | Alta | Corregido |
+| BUG-006 | R3 | Timeout con el SIFEN se trata como rechazo y el reintento genera otro CDC | Media | Corregido |
 | BUG-007 | R3 | El CDC ignora el establecimiento/punto de expedición de la factura | Media | Corregido |
 | BUG-008 | R3 | `sifen.envio.timeout-segundos` no se aplica al tiempo de respuesta | Baja | Corregido |
 | BUG-009 | R3 | XML del DTE armado sin escapar caracteres especiales | Media | Corregido |
-| BUG-010 | R3 | Token vencido devuelve 403 y el frontend no cierra la sesión | Media | Abierto |
-| BUG-011 | R3 | Un ADMIN puede quitarse su propio rol y dejar el sistema sin administradores | Baja | Abierto |
+| BUG-010 | R3 | Token vencido devuelve 403 y el frontend no cierra la sesión | Media | Corregido |
+| BUG-011 | R3 | Un ADMIN puede quitarse su propio rol y dejar el sistema sin administradores | Baja | Corregido |
 | BUG-012 | R3 | Body mal formado o UUID inválido en la URL devuelven 500 | Baja | Corregido |
 | BUG-013 | R3 | El PDF de la factura no es un KuDE: le faltan número, timbrado, CDC y QR | Alta | Corregido |
+| BUG-014 | R3 | Crear o editar un establecimiento con un nombre en el código de departamento/ciudad da 500 | Media | Corregido |
+| BUG-015 | R3 | Los modales de los ABM se cierran al hacer clic afuera y se pierde lo cargado | Media | Corregido |
+| BUG-016 | R3 | El campo de monto muestra un 0 que queda pegado al número tecleado | Baja | Corregido |
+| BUG-017 | R3 | "Guardar borrador" sigue activo sin cambios y se puede enviar sin guardar lo último | Media | Corregido |
+| BUG-018 | R3 | Las alertas son chicas y desaparecen a los 4 segundos | Baja | Corregido |
+| BUG-019 | R3 | El correo al cliente muestra el UUID y se da por enviado aunque el cliente no tenga email | Media | Corregido |
+| BUG-020 | R3 | PDF del Libro IVA: la condición de las NC pisa el monto y FE/NC con igual número no se distinguen | Media | Corregido |
+| BUG-021 | R3 | *Verificar en el SIFEN* reenvía el DE aunque pasaron más de 72 h desde la firma | Media | Corregido |
+| BUG-022 | R3 | `PUT /api/configuracion/emisor` no valida el request (`@Valid` faltante) | Baja | Corregido |
 
 **Patrón recurrente:** A2 y C1 son el mismo defecto (relación `@ManyToOne` LAZY leída fuera de la
 transacción con `open-in-view=false`). Revisarlo en todo DTO nuevo que lea una relación.
@@ -158,7 +181,7 @@ cómo), **Ubicación**, **Síntoma**, **Causa**, **Corrección** (archivos y com
 
 #### BUG-001 — Una falla del correo revierte una factura ya aprobada por el SIFEN
 
-- **Estado:** Abierto
+- **Estado:** Corregido
 - **Severidad:** Alta
 - **Detectado:** 2026-10-06, revisión de código
 - **Ubicación:** `backend/.../facturacion/FacturaService.java:122-162` (`confirmarEnvio`),
@@ -170,9 +193,9 @@ cómo), **Ubicación**, **Síntoma**, **Causa**, **Corrección** (archivos y com
   al SIFEN, la generación del PDF y el envío por correo. `EnviadorEmailStub` lanza
   `UncheckedIOException` ante un error de disco, lo que revierte toda la transacción, incluido el
   estado `APROBADO` y la `RespuestaSifen`.
-- **Corrección:** Pendiente
-- **Verificación:** Pendiente
-- **Corregido:** —
+- **Corrección:** `FacturaService.enviarPorCorreo` atrapa la falla del PDF/correo: el documento queda `APROBADO` con `emailEnviado=false`, se registra `EMAIL_FALLIDO` en la auditoría y se loguea el error. El correo ya no puede revertir la transacción.
+- **Verificación:** `FacturaServiceTest.unaFallaDelCorreoNoRevierteLaFacturaAprobada`; por HTTP, con la carpeta de salida del correo reemplazada por un archivo: antes 500 y la factura volvía a `BORRADOR`, ahora 200, `APROBADO`, `emailEnviado=false`.
+- **Corregido:** 03/11/2026
 
 #### BUG-002 — `respuesta_sifen.descripcion` (250) se desborda en modo real
 
@@ -192,21 +215,23 @@ cómo), **Ubicación**, **Síntoma**, **Causa**, **Corrección** (archivos y com
 
 #### BUG-003 — Editar un cliente cambiando el RUC produce error 500
 
-- **Estado:** Abierto
+- **Estado:** Corregido
 - **Severidad:** Alta
 - **Detectado:** 2026-10-06, revisión de código
 - **Ubicación:** `backend/.../clientes/ClienteService.java:51-55` y `:71-77` (`aplicar`)
 - **Síntoma:** `PUT /api/clientes/{ruc}` con un `ruc` distinto en el body responde 500.
-- **Causa:** `aplicar()` hace `cliente.setRuc(request.ruc())` sobre una entidad gestionada cuyo
-  `@Id` es el RUC; Hibernate rechaza la modificación del identificador. Además, la edición no
-  valida el RUC nuevo.
-- **Corrección:** Pendiente
-- **Verificación:** Pendiente
-- **Corregido:** —
+- **Síntoma observado (03/11/2026):** no da 500 como se había previsto: `PUT /api/clientes/{ruc}` con otro RUC responde 200 y **crea un cliente nuevo** con el RUC del body (el original queda igual). `editar` no es transaccional, así que la entidad está desacoplada y `save` hace un `merge` contra un id que no existe.
+- **Causa:** `aplicar()` hace `cliente.setRuc(request.ruc())` sobre la entidad cuyo `@Id` es el
+  RUC. En la revisión se supuso que Hibernate rechazaría el cambio del identificador; en la
+  práctica la entidad está desacoplada y se inserta otro cliente (ver el síntoma observado).
+  Además, la edición no valida el RUC nuevo.
+- **Corrección:** `ClienteService.editar` rechaza con 409 un RUC distinto del de la URL ("El RUC/CI de un cliente no se puede modificar. Registrá un cliente nuevo… y desactivá el actual"); `aplicar` ya no toca el RUC (solo lo asigna `crear`). El RUC es la clave del cliente y lo referencian sus facturas emitidas. El frontend ya tenía el campo deshabilitado al editar.
+- **Verificación:** `ClienteServiceTest` (+2); por HTTP y en Newman (*Correcciones de defectos / BUG-003*): 409 con el mensaje, y editar el resto de los datos sigue funcionando.
+- **Corregido:** 03/11/2026
 
 #### BUG-004 — Doble confirmación concurrente envía la factura dos veces
 
-- **Estado:** Abierto
+- **Estado:** Corregido
 - **Severidad:** Alta
 - **Detectado:** 2026-10-06, revisión de código
 - **Ubicación:** `backend/.../facturacion/FacturaService.java:122-125`,
@@ -215,13 +240,13 @@ cómo), **Ubicación**, **Síntoma**, **Causa**, **Corrección** (archivos y com
   para la misma factura.
 - **Causa:** el chequeo `exigirEstado(BORRADOR)` no está protegido por bloqueo optimista ni
   pesimista; ambas requests leen `BORRADOR` antes de que la otra escriba.
-- **Corrección:** Pendiente
-- **Verificación:** Pendiente
-- **Corregido:** —
+- **Corrección:** `confirmarEnvio` lee la factura con `FacturaRepository.findByIdParaActualizar` (`PESSIMISTIC_WRITE`, `SELECT … FOR UPDATE`): la segunda confirmación espera a que termine la primera y ya no encuentra el `BORRADOR` (409). Se eligió bloqueo pesimista y no optimista (`@Version`) porque el optimista detecta el conflicto recién al hacer commit, cuando el DE ya fue enviado dos veces.
+- **Verificación:** `FacturaServiceTest.confirmarLeeLaFacturaConBloqueoDeFila`; por HTTP contra PostgreSQL, 5 rondas de dos `confirmar` simultáneos: siempre 200/409 y un solo envío al SIFEN por documento. La versión anterior daba 200/500 con los dos envíos hechos.
+- **Corregido:** 03/11/2026
 
 #### BUG-005 — Usuario desactivado conserva acceso con su JWT vigente
 
-- **Estado:** Abierto
+- **Estado:** Corregido
 - **Severidad:** Alta
 - **Detectado:** 2026-10-06, revisión de código
 - **Ubicación:** `backend/.../auth/JwtAuthFilter.java:40-48`
@@ -229,13 +254,13 @@ cómo), **Ubicación**, **Síntoma**, **Causa**, **Corrección** (archivos y com
   usuario se borra de la base, sus requests devuelven 500.
 - **Causa:** el filtro carga el `UserDetails` pero no verifica `isEnabled()`; la
   `UsernameNotFoundException` se lanza dentro del filtro, fuera del `GlobalExceptionHandler`.
-- **Corrección:** Pendiente
-- **Verificación:** Pendiente
-- **Corregido:** —
+- **Corrección:** `JwtAuthFilter` solo autentica si el usuario sigue habilitado (`isEnabled()`); si fue desactivado o borrado, la request sigue sin autenticar y Spring Security la rechaza (403), en vez de operar con el token o terminar en 500.
+- **Verificación:** `JwtAuthFilterTest` (3); por HTTP y en Newman (*BUG-005*): el token de un operario recién desactivado pasa de 200 a 403. El código 403 (y no 401) es el de BUG-010, que sigue abierto.
+- **Corregido:** 03/11/2026
 
 #### BUG-006 — Timeout con el SIFEN se trata como rechazo y el reintento genera otro CDC
 
-- **Estado:** Abierto
+- **Estado:** Corregido
 - **Severidad:** Media
 - **Detectado:** 2026-10-06, revisión de código
 - **Ubicación:** `backend/.../sifen/EnviadorSifenSoapService.java:111-119` y `generarCdc`
@@ -244,9 +269,9 @@ cómo), **Ubicación**, **Síntoma**, **Causa**, **Corrección** (archivos y com
   documento en el SIFEN.
 - **Causa:** cualquier excepción se mapea a rechazo; el CDC y el número de documento no se
   persisten en la factura, se recalculan en cada envío.
-- **Corrección:** Pendiente
-- **Verificación:** Pendiente
-- **Corregido:** —
+- **Corrección:** Se distingue "no se pudo conectar" de "no se sabe si llegó". Si no hubo conexión (`ConnectException`, timeout de conexión, handshake TLS) sigue siendo un rechazo. Si el SIFEN no respondió después de recibir el envío (timeout de respuesta, conexión cortada, respuesta ilegible), el documento queda `EN_PROCESO` con su número, CDC y XML firmado, y no se puede reabrir. Nuevo `POST /api/facturas/{id}/verificar` consulta el DE por CDC (`siConsDE`): `0422` → `APROBADO` (sin reenviar); `0420` → reenvía el mismo XML firmado (mismo número y CDC); otra respuesta → sigue `EN_PROCESO`. En el frontend, aviso "Envío sin confirmar" con el botón *Verificar en el SIFEN*. También `GET /api/sifen/consulta-de/{cdc}` para consultar cualquier documento. El stub simula la falta de respuesta con la marca `SIN_RESPUESTA`.
+- **Verificación:** `FacturaServiceTest` (+5) y `EnviadorSifenSoapServiceTest` (+6, uno con un servidor HTTP local que no contesta); `siConsDE` real contra el SIFEN de test (`0422` para FE y NC aprobadas, `0420` para un CDC inexistente); por HTTP y en Newman: `EN_PROCESO` → no se reabre → *verificar* → `APROBADO` con el mismo número.
+- **Corregido:** 03/11/2026
 
 #### BUG-007 — El CDC ignora el establecimiento/punto de expedición de la factura
 
@@ -293,7 +318,7 @@ cómo), **Ubicación**, **Síntoma**, **Causa**, **Corrección** (archivos y com
 
 #### BUG-010 — Token vencido devuelve 403 y el frontend no cierra la sesión
 
-- **Estado:** Abierto
+- **Estado:** Corregido
 - **Severidad:** Media
 - **Detectado:** 2026-10-06, revisión de código
 - **Ubicación:** `backend/.../config/SecurityConfig.java:81` (sin `authenticationEntryPoint`),
@@ -302,22 +327,33 @@ cómo), **Ubicación**, **Síntoma**, **Causa**, **Corrección** (archivos y com
   al login.
 - **Causa:** sin entry point configurado, Spring responde 403 a requests no autenticadas; el
   frontend no maneja 401/403 para limpiar la sesión.
-- **Corrección:** Pendiente
-- **Verificación:** Pendiente
-- **Corregido:** —
+- **Corrección:** backend: `config/RestAuthenticationEntryPoint` responde **401** con el formato de
+  `ApiError` ("Tu sesión venció o no es válida…") a toda request sin token válido (vencido, adulterado
+  o de un usuario desactivado); el 403 queda solo para "autenticado sin el rol". Frontend: interceptor
+  de respuesta en `api/client.ts`: ante un 401 fuera de `/auth/` guarda el aviso y dispara el evento
+  `sifen:sesion-vencida`; `AuthProvider` limpia la sesión y `ProtectedRoute` lleva al login, que
+  muestra el motivo. El 401 del login con clave incorrecta no cierra nada (lo muestra el formulario).
+- **Verificación:** por HTTP (`http-rg90.js`): sin token → 401 `UNAUTHORIZED`; token adulterado → 401;
+  clave incorrecta → sigue 401 `INVALID_CREDENTIALS`; operario contra `/api/usuarios` → sigue 403.
+  La aserción de Newman de *BUG-005* ya aceptaba 401/403. Build del frontend OK.
+- **Corregido:** 05/11/2026
 
 #### BUG-011 — Un ADMIN puede quitarse su propio rol y dejar el sistema sin administradores
 
-- **Estado:** Abierto
+- **Estado:** Corregido
 - **Severidad:** Baja
 - **Detectado:** 2026-10-06, revisión de código
 - **Ubicación:** `backend/.../auth/UsuarioService.java:53-61`
 - **Síntoma:** si el único ADMIN se edita a sí mismo como OPERARIO, nadie puede volver a
   administrar usuarios desde la aplicación.
 - **Causa:** `editar` no valida el cambio de rol propio ni que quede al menos un ADMIN activo.
-- **Corrección:** Pendiente
-- **Verificación:** Pendiente
-- **Corregido:** —
+- **Corrección:** `UsuarioService`: un ADMIN no puede quitarse su propio rol, y no se puede pasar a
+  OPERARIO ni desactivar (por `editar` o `desactivar`) a un ADMIN si no queda otro ADMIN activo
+  (`UsuarioRepository.countByRolAndActivoTrueAndIdNot`). Responde 409 con el motivo.
+- **Verificación:** `UsuarioServiceTest` (+4: quitarse el rol, pasar a OPERARIO al único admin activo,
+  cambiarlo si hay otro admin, desactivar al único admin activo). Por HTTP: el admin que se edita como
+  OPERARIO recibe 409 "No podés quitarte tu propio rol de administrador" y sigue siendo ADMIN.
+- **Corregido:** 05/11/2026
 
 #### BUG-012 — Body mal formado o UUID inválido en la URL devuelven 500
 
@@ -362,6 +398,114 @@ cómo), **Ubicación**, **Síntoma**, **Causa**, **Corrección** (archivos y com
   `4bd9897b-…` (sección 1).
 - **Corregido:** 29/10/2026
 
+#### BUG-014 — Crear o editar un establecimiento con un nombre en el código de departamento/ciudad da 500
+
+- **Estado:** Corregido
+- **Severidad:** Media
+- **Detectado:** 03/11/2026 en el log del backend (19:31, dos veces); reportado por el usuario el 05/11 ("al crear un nuevo establecimiento Ocurrió un error inesperado")
+- **Ubicación:** `EstablecimientoRequest` y los demás DTO de alta/edición; `GlobalExceptionHandler`; formularios del frontend
+- **Síntoma:** la pantalla mostraba "Ocurrió un error inesperado" sin decir qué campo estaba mal.
+- **Causa:** `departamento_codigo`, `distrito_codigo` y `ciudad_codigo` son `varchar(5)` (V5) y llevan el código numérico del SIFEN, pero el request no validaba nada. Un nombre como "CENTRAL" llegaba a la base, PostgreSQL respondía "el valor es demasiado largo para el tipo character varying(5)" y eso caía en el handler genérico de 500. Pasaba lo mismo en todos los formularios: ningún request validaba el largo de las columnas.
+- **Corrección:** validaciones según el tipo de cada columna en todos los requests: `@Size` con el largo de la tabla, `@Pattern` numérico para los códigos geográficos, el RUC base y el timbrado, `@Email`, `@Digits` para los montos y rangos para cantidad, plazo, cuotas, DV y tipo de contribuyente. Los mensajes nombran el campo ("El código de ciudad es numérico, de hasta 5 dígitos (el nombre va en la descripción)"). La descripción de producto e ítem se limita a 120, el máximo del SIFEN (E708). El 400 de validación muestra solo los mensajes, sin el nombre técnico del atributo. Como red de seguridad, `DataIntegrityViolationException` responde 400/409 legible (largo excedido con el máximo, duplicado, referencia) en vez de 500. En el frontend: `maxLength`, `pattern` e `inputMode` por campo, y una ayuda que explica que en departamento, distrito y ciudad va el código y el nombre en el campo de al lado.
+- **Verificación:** por HTTP contra la app: el mismo alta con `CENTRAL` y un email inválido devuelve 400 con los tres mensajes; Newman sin cambios (76/125).
+- **Corregido:** 05/11/2026
+
+#### BUG-015 — Los modales de los ABM se cierran al hacer clic afuera y se pierde lo cargado
+
+- **Estado:** Corregido
+- **Severidad:** Media
+- **Detectado:** 05/11/2026, reportado por el usuario
+- **Ubicación:** `frontend/src/components/ui/Modal.tsx` (lo usan todos los ABM)
+- **Síntoma:** un clic fuera del formulario cerraba el modal y se perdía lo cargado.
+- **Causa:** el fondo del modal tenía `onClick={onClose}`.
+- **Corrección:** el fondo ya no cierra: se cierra con la **X** de la esquina, con *Cancelar* o con Escape. Se agregó `role="dialog"`.
+- **Verificación:** build del frontend; aplica a productos, clientes, usuarios, establecimientos y puntos de expedición.
+- **Corregido:** 05/11/2026
+
+#### BUG-016 — El campo de monto muestra un 0 que queda pegado al número tecleado
+
+- **Estado:** Corregido
+- **Severidad:** Baja
+- **Detectado:** 05/11/2026, reportado por el usuario ("el campo de monto al cargar un producto tiene un cero medio raro")
+- **Ubicación:** `ProductosPage` (precio base) e ítems de `FacturaFormPage` y `NotaFormPage`
+- **Síntoma:** el precio arrancaba en `0` y al escribir quedaba "0280000"; además aceptaba decimales, que el guaraní no tiene.
+- **Causa:** `input type=number` con valor inicial `0`: React no reformatea el texto de un input numérico.
+- **Corrección:** componente `MontoInput`: vacío con placeholder en vez de 0, solo dígitos y separador de miles mientras se escribe ("280.000").
+- **Verificación:** build del frontend.
+- **Corregido:** 05/11/2026
+
+#### BUG-017 — "Guardar borrador" sigue activo sin cambios y se puede enviar sin guardar lo último
+
+- **Estado:** Corregido
+- **Severidad:** Media
+- **Detectado:** 05/11/2026, reportado por el usuario
+- **Ubicación:** `FacturaFormPage`, `NotaFormPage`
+- **Síntoma:** después de guardar, el botón seguía activo. Y si se editaba algo sin guardar, *Confirmar y enviar* mandaba al SIFEN la versión guardada, no la que se veía en pantalla.
+- **Causa:** la pantalla no comparaba el formulario con lo último guardado.
+- **Corrección:** se guarda una firma (JSON) de lo último guardado o cargado y se compara con el formulario. Sin cambios, el botón queda inactivo con el texto "Borrador guardado". Con cambios sin guardar, *Confirmar y enviar* se inactiva con la ayuda "Guardá el borrador antes de enviarlo".
+- **Verificación:** build del frontend.
+- **Corregido:** 05/11/2026
+
+#### BUG-018 — Las alertas son chicas y desaparecen a los 4 segundos
+
+- **Estado:** Corregido
+- **Severidad:** Baja
+- **Detectado:** 05/11/2026, reportado por el usuario
+- **Ubicación:** `frontend/src/components/ui/ToastProvider.tsx`
+- **Síntoma:** los avisos (por ejemplo, el motivo de un rechazo) no llegaban a leerse.
+- **Causa:** texto de 14 px y una duración fija de 4 s.
+- **Corrección:** texto de 16 px, ícono más grande y un borde de color por tipo. Duran 6 s (éxito), 8 s (información) y 12 s (error), y tienen una X para cerrarlos antes.
+- **Verificación:** build del frontend.
+- **Corregido:** 05/11/2026
+
+#### BUG-019 — El correo al cliente muestra el UUID y se da por enviado aunque el cliente no tenga email
+
+- **Estado:** Corregido
+- **Severidad:** Media
+- **Detectado:** 03/11/2026 al revisar el correo simulado; el usuario pidió "ver envío de correo" el 05/11
+- **Ubicación:** `email/EnviadorEmailStub.java`, `FacturaService.enviarPorCorreo`
+- **Síntoma:** el cuerpo decía "factura N.° 4bd9897b-…" (el UUID), con el total sin formato. Con un cliente sin email, el "Para:" quedaba vacío y la factura figuraba como *enviada por correo*.
+- **Causa:** el stub armaba el texto con `factura.getId()` y no controlaba el destinatario.
+- **Corrección:** `CorreoDocumento` arma el asunto y el cuerpo con el tipo y el número del comprobante, el total en guaraníes, el CDC y el enlace de consulta de e-Kuatia; los adjuntos se llaman `factura-001-001-0000005.pdf/.xml`. Sin email no se intenta el envío: queda `emailEnviado=false` y se audita `EMAIL_SIN_DESTINATARIO`. Nuevo `POST /api/facturas/{id}/reenviar-correo` y, en el detalle, a quién se envió o por qué no, con el botón para (re)enviar. Además, envío real por SMTP (`EnviadorEmailSmtp`, `sifen.email.modo=smtp` con `SPRING_MAIL_*` y `SIFEN_EMAIL_REMITENTE`). El modo por defecto sigue siendo el stub hasta que se defina la cuenta. El health de Actuator no depende del SMTP.
+- **Verificación:** `EnviadorEmailSmtpTest` (5) y `FacturaServiceTest` (+4). Por HTTP en modo stub: cliente sin email → aprobada sin error → reenviar 409 "no tiene email registrado" → cargar el email → reenviar 200. Correo simulado revisado. **El envío SMTP real todavía no se probó contra un servidor**: falta la cuenta.
+- **Corregido:** 05/11/2026
+
+#### BUG-020 — PDF del Libro IVA: la condición de las NC pisa el monto y FE/NC con igual número no se distinguen
+
+- **Estado:** Corregido
+- **Severidad:** Media
+- **Detectado:** 05/11/2026, reportado por el usuario ("corregir la salida del pdf Libro IVA Ventas")
+- **Ubicación:** `reportes/LibroIvaPdfExporter.java`
+- **Síntoma:** en las NC se leía "Ajusta 001-001-00000015.500" (el documento asociado encima del gravado 10%). La FE 001-001-0000001 y la NC 001-001-0000001 aparecían iguales, faltaba el timbrado y el pie decía solo "Página 1".
+- **Causa:** columnas con posiciones x fijas sin recortar el texto, y sin columna de tipo de comprobante.
+- **Corrección:** columnas de ancho fijo con el texto recortado con "…". Columnas nuevas: *Tipo* (FE/NC/ND), *Timbrado* y *Doc. asociado* (en las notas, la condición pasa a "-"). Además: filas alternadas sombreadas, el período como "Noviembre 2026", pie con "Generado el …" y "Página X de N", y un mensaje cuando no hay comprobantes. Los caracteres fuera de WinAnsi se reemplazan para que el reporte no falle.
+- **Verificación:** `LibroIvaPdfExporterTest` (4) y el PDF real de noviembre revisado visualmente.
+- **Corregido:** 05/11/2026
+
+#### BUG-021 — *Verificar en el SIFEN* reenvía el DE aunque pasaron más de 72 h desde la firma
+
+- **Estado:** Corregido
+- **Severidad:** Media
+- **Detectado:** 03/11/2026, al responder la consulta del usuario sobre los plazos de 48/72 h; pedido el 05/11 ("validar tiempos de envío y anulación")
+- **Ubicación:** `FacturaService.verificarEnvio`, `VerificarEnvioAviso.tsx`
+- **Síntoma:** un documento `EN_PROCESO` que el SIFEN no tiene (0420) se reenviaba con el mismo XML firmado, sin importar cuándo se había firmado.
+- **Causa:** no se controlaba el plazo de transmisión del Manual Técnico v150 (6.2: hasta 72 h después de la firma).
+- **Corrección:** si el SIFEN no tiene el documento y pasaron más de 72 h desde la firma, no se reenvía: queda `RECHAZADO` con el código `PLAZO_VENCIDO` y una explicación, para reabrirlo y volver a firmarlo. La firma se toma de `fechaEmision`, que se fija junto con ella al confirmar. Si el SIFEN sí tiene el documento, queda aprobado igual. El aviso de la pantalla muestra hasta cuándo se puede transmitir.
+- **Verificación:** `FacturaServiceTest` (+2): con 73 h y 0420 queda rechazado, sin reenviar y sin contar intento; con 100 h y 0422 queda aprobado.
+- **Corregido:** 05/11/2026
+
+#### BUG-022 — `PUT /api/configuracion/emisor` no valida el request (`@Valid` faltante)
+
+- **Estado:** Corregido
+- **Severidad:** Baja
+- **Detectado:** 05/11/2026, en la prueba por HTTP de BUG-014
+- **Ubicación:** `configuracion/ConfiguracionEmisorController.java`
+- **Síntoma:** con un timbrado "ABC" y "CAPITAL" como código de departamento, la respuesta era el 400 genérico de la red de seguridad de la base ("supera el largo permitido"), no los mensajes por campo.
+- **Causa:** era el único `@RequestBody` sin `@Valid`, así que las anotaciones nuevas del DTO no se evaluaban.
+- **Corrección:** `@Valid` en el controller. Se revisaron todos los controllers: no queda ningún `@RequestBody` sin validar.
+- **Verificación:** por HTTP: 400 con "El número de timbrado es numérico…", "El dígito verificador va de 0 a 9" y "El código de departamento es numérico…".
+- **Corregido:** 05/11/2026
+
 ---
 
 ## 3. Ajustes a la suite de pruebas
@@ -377,6 +521,9 @@ Todos detectados en Release 1, al automatizar la colección de Postman con Newma
 | B4 | Aserción fallaba: `expected undefined to deeply equal BORRADOR` | Se comparaba contra el campo `estado`, que no existe; el real es `estadoDte` | Corregir el nombre del campo |
 | B5 | (R3, 02/11/2026) `CifradoSecretosTest.unValorAlteradoNoDescifra` fallaba 1 de cada ~5 corridas | El test alteraba un carácter del base64 que a veces caía en los bits de relleno y no cambiaba los bytes cifrados | Alterar un byte del texto cifrado decodificado (posición 14, después del IV) |
 | B6 | (R3, 02/11/2026) *Establecimientos / Crear* devolvió 409 "Ya existe un establecimiento con el código 716" en la 4.ª corrida contra la misma base | El código se tomaba de los últimos 3 dígitos del `runId` (milisegundos): al repetir la colección contra la misma base, tarde o temprano choca | El pre-request lista los establecimientos (`pm.sendRequest`) y elige un código de 3 dígitos libre. La colección pasa a 64 requests (cuenta la consulta) |
+| B8 | (R3, 05/11/2026) `LibroIvaServiceTest.laLiquidacion…` falló con `PotentialStubbingProblem` | La liquidación arma también el libro de ventas, que consulta `delPeriodo(VENTA, …)`, y el test solo había simulado la consulta de compras | Simular también la consulta de ventas (lista vacía) |
+| B9 | (R3, 05/11/2026) `http-rg90.js`: "formato inválido → 400 con mensajes" esperaba 2 detalles y llegó 1 | El timbrado "1" cumple el formato del DTO (`\d{0,8}`); que tenga exactamente 8 dígitos lo controla el servicio (409), no Bean Validation | La aserción pasa a verificar el mensaje del número de comprobante |
+| B7 | (R3, 05/11/2026) `CifradoSecretosTest.elPostProcessorFallaSiHayUnSecretoCifradoYNoHayClaveMaestra` fallaba en una terminal nueva | `StandardEnvironment` incluye las variables de entorno reales, y la máquina ya tiene definida `SIFEN_MASTER_KEY` (RNF-03): el test, que espera que *no* haya clave maestra, la encontraba | El test quita las fuentes del entorno del sistema antes de ejecutar el post-processor |
 
 ---
 
@@ -598,3 +745,56 @@ Todos detectados en Release 1, al automatizar la colección de Postman con Newma
   reproducir el caso real.
 - **Estado local:** `.env` con la contraseña del certificado en `ENC(...)`; `iniciar-backend.ps1`
   toma `SIFEN_MASTER_KEY` del ámbito de usuario si la terminal es anterior.
+
+### H-13 — Plazos de envío y de anulación (Manual Técnico v150)
+
+- **Fecha:** 05/11/2026, a partir del pedido del usuario "validar tiempos de envío y anulación".
+- **Envío:** el DE se transmite dentro de las 72 h siguientes a su firma (6.2). En este sistema la
+  firma y el envío ocurren en el mismo *confirmar*, así que el plazo solo se puede pasar al reenviar
+  un documento `EN_PROCESO`. Ese caso se controla desde BUG-021.
+- **Anulación:** el plazo de 48 h (FE) o 168 h (otros DTE) desde la aprobación es el del **evento de
+  cancelación** (`siRecepEvento`), que el sistema todavía no implementa. La anulación que tiene el
+  sistema es por **nota de crédito** (M6), que no tiene ese plazo, así que hoy no hay dónde aplicar
+  la regla de 48 h. Si se implementa el evento de cancelación, el control de 48/168 h va ahí, y
+  vencido ese plazo la pantalla debería ofrecer solo la NC.
+
+### H-14 — Libros IVA y Registro de Comprobantes (RG 90/2021)
+
+- **Fecha:** 05/11/2026, a partir del pedido "implementemos los módulos necesarios para cumplir con
+  los libros de IVA".
+- **Fuente:** *Especificación Técnica para Importación — Registro de Comprobantes de Ventas, Compras,
+  Ingresos y/o Egresos* de la SET (v1, junio 2021), publicada por la DNIT.
+- **Qué exige:** los contribuyentes registran mensualmente sus comprobantes en Marangatu (obligación
+  955), a mano o importando un archivo. Puntos clave de la especificación:
+  - el archivo **no debe incluir comprobantes del SIFEN (e-Kuatia) ni virtuales**, que Marangatu
+    toma directamente;
+  - es CSV o TXT con tabuladores, en UTF-8 y sin fila de títulos, comprimido en un ZIP con el mismo
+    nombre `<RUC sin DV>_REG_MMAAAA_XXXXX`;
+  - lleva hasta 5.000 filas por archivo;
+  - los montos van enteros y positivos;
+  - la SET valida el archivo en hasta 72 h, y las correcciones se hacen a mano.
+- **Consecuencia para Tottal Store:** las ventas electrónicas ya están en la SET. Lo que faltaba para
+  cumplir era:
+  1. registrar las **compras**, que dan el crédito fiscal;
+  2. registrar las ventas que no pasan por el SIFEN (preimpresas o tickets);
+  3. tener el **Libro IVA Compras**;
+  4. tener una **liquidación** débito − crédito del mes;
+  5. generar el **archivo de importación**.
+- **Decisiones:**
+  - Formato TXT con tabuladores, para que una coma en la razón social no corra las columnas (el
+    ejemplo CSV del anexo usa ";", así que el CSV quedaba ambiguo).
+  - Una compra con CDC (DE recibido) entra al Libro IVA Compras pero no al archivo.
+  - Al Libro Compras solo va lo imputado al IVA.
+  - En compras, autofactura, boleta resimple, loterías y ticket solo informan el total, como manda
+    la especificación, y no dan crédito fiscal.
+  - La liquidación es referencial para el Formulario 120: no incluye saldos anteriores, retenciones
+    ni percepciones.
+  - Los registros de ingresos y egresos (tipos 2xx) quedan fuera: son del IRP-RSP, que no aplica a
+    Tottal Store.
+- **Implementación:**
+  - Base: migración V10.
+  - Backend: paquete `registro/` y `ReportesController` (`/libro-iva?libro=COMPRAS`,
+    `/liquidacion-iva`, `/registro-rg90`).
+  - Pantallas: *Compras y otros comprobantes*, y *Libros IVA* con pestañas.
+- **Pendiente de validar:** importar un archivo real en Marangatu con el RUC de Tottal Store. Eso
+  solo se puede hacer con su clave de acceso, y la SET puede tardar hasta 72 h en validarlo.

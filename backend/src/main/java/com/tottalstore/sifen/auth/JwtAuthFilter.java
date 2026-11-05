@@ -10,6 +10,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -39,8 +40,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             String token = header.substring(PREFIX.length());
             if (jwtService.esValido(token)) {
                 String email = jwtService.extraerEmail(token);
-                if (SecurityContextHolder.getContext().getAuthentication() == null) {
-                    UserDetails userDetails = userDetailsService.loadUserByUsername(email);
+                UserDetails userDetails = SecurityContextHolder.getContext().getAuthentication() == null
+                        ? cargarUsuarioHabilitado(email)
+                        : null;
+                if (userDetails != null) {
                     var authToken = new UsernamePasswordAuthenticationToken(
                             userDetails, null, userDetails.getAuthorities());
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
@@ -50,5 +53,19 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    /**
+     * BUG-005: el token sigue siendo válido aunque el usuario se haya desactivado o borrado después de
+     * emitirlo. En esos casos la request sigue sin autenticar (y Spring Security la rechaza) en vez de
+     * operar con el token o terminar en un 500.
+     */
+    private UserDetails cargarUsuarioHabilitado(String email) {
+        try {
+            UserDetails userDetails = userDetailsService.loadUserByUsername(email);
+            return userDetails.isEnabled() ? userDetails : null;
+        } catch (UsernameNotFoundException e) {
+            return null;
+        }
     }
 }

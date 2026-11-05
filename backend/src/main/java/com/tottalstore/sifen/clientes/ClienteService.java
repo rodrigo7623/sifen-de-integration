@@ -44,13 +44,25 @@ public class ClienteService {
         validarRucOFallar(request.ruc());
 
         Cliente cliente = new Cliente();
+        cliente.setRuc(request.ruc());
         aplicar(cliente, request);
         return clienteRepository.save(cliente);
     }
 
+    /**
+     * BUG-003: el RUC es la clave del cliente y lo referencian sus facturas ya emitidas, así que no se
+     * edita. Un RUC mal cargado se corrige dando de alta el cliente correcto y desactivando este.
+     */
     public Cliente editar(String ruc, ClienteRequest request) {
         Cliente cliente = obtener(ruc);
+        if (!ruc.equals(request.ruc())) {
+            throw new BusinessException("El RUC/CI de un cliente no se puede modificar. Registrá un cliente nuevo con el RUC "
+                    + request.ruc() + " y desactivá el actual.");
+        }
         aplicar(cliente, request);
+        if (request.activo() != null) {
+            cliente.setActivo(request.activo());
+        }
         return clienteRepository.save(cliente);
     }
 
@@ -69,7 +81,6 @@ public class ClienteService {
     }
 
     private void aplicar(Cliente cliente, ClienteRequest request) {
-        cliente.setRuc(request.ruc());
         cliente.setRazonSocial(request.razonSocial());
         cliente.setDireccion(request.direccion());
         cliente.setEmail(request.email());

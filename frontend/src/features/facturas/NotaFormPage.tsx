@@ -1,4 +1,4 @@
-import { Download, FileCode2, Mail, Plus, RotateCcw, X } from "lucide-react";
+import { Download, FileCode2, Plus, RotateCcw, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { extraerMensajeError } from "../../api/client";
@@ -18,7 +18,10 @@ import { Button } from "../../components/ui/Button";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
 import { useToast } from "../../components/ui/ToastProvider";
 import { descargarArchivo, facturasApi, nombreArchivo, type ItemFacturaInput } from "./api";
+import { MontoInput } from "../../components/ui/MontoInput";
+import { EstadoCorreo } from "./EstadoCorreo";
 import { calcularTotales, subtotalItem } from "./totales";
+import { resultadoEnvio, VerificarEnvioAviso } from "./VerificarEnvioAviso";
 
 interface FilaItem extends ItemFacturaInput {
   localId: string;
@@ -27,8 +30,19 @@ interface FilaItem extends ItemFacturaInput {
 function badgeTone(estado: EstadoDte): "ok" | "off" | "warn" | "info" {
   if (estado === "APROBADO") return "ok";
   if (estado === "RECHAZADO") return "off";
-  if (estado === "ANULADO") return "warn";
+  if (estado === "ANULADO" || estado === "EN_PROCESO") return "warn";
   return "info";
+}
+
+/** Para comparar el formulario con la nota guardada: sin cambios, "Guardar borrador" queda inactivo. */
+function firmaNota(tipo: TipoDocumento, motivo: MotivoNota | null, items: ItemFacturaInput[]): string {
+  return JSON.stringify({
+    tipo,
+    motivo,
+    items: items.map(({ productoCodigo, descripcion, cantidad, precioUnitario, tasaIva }) => ({
+      productoCodigo, descripcion, cantidad, precioUnitario, tasaIva,
+    })),
+  });
 }
 
 function filaDesde(item: ItemFacturaInput): FilaItem {
@@ -129,6 +143,8 @@ export function NotaFormPage() {
     .reduce((s, n) => s + n.totalGeneral, 0);
   const saldoAcreditable = factura ? factura.totalGeneral - acreditado : 0;
   const superaSaldo = tipo === "NC" && totales.totalGeneral > saldoAcreditable;
+  const hayCambios =
+    !nota || firmaNota(tipo, motivo, items) !== firmaNota(nota.tipoDocumento, nota.motivoEmision, nota.items);
 
   async function guardar() {
     if (!factura) return;
@@ -169,10 +185,7 @@ export function NotaFormPage() {
     try {
       const enviada = await facturasApi.confirmar(nota.id);
       setNota(enviada);
-      showToast(
-        enviada.estadoDte === "APROBADO" ? "Nota aprobada por el SIFEN" : "Nota rechazada por el SIFEN",
-        enviada.estadoDte === "APROBADO" ? "success" : "error",
-      );
+      showToast(...resultadoEnvio(enviada, "Nota"));
       if (enviada.facturaAsociadaId) await cargarFactura(enviada.facturaAsociadaId, enviada.id);
     } catch (err) {
       setError(extraerMensajeError(err, "No se pudo confirmar el envío"));
@@ -224,12 +237,20 @@ export function NotaFormPage() {
         <p className="mb-3 flex flex-wrap items-center gap-2 text-sm">
           Estado: <Badge tone={badgeTone(estadoDte)}>{ESTADO_DTE_LABEL[estadoDte]}</Badge>
           {nota.cdc && <span className="font-mono text-xs text-texto-suave">CDC {nota.cdc}</span>}
-          {nota.emailEnviado && (
-            <span className="inline-flex items-center gap-1 text-xs text-texto-suave">
-              <Mail size={12} /> Enviada por correo al cliente
-            </span>
-          )}
+          <EstadoCorreo documento={nota} onActualizado={setNota} />
         </p>
+      )}
+
+      {estadoDte === "EN_PROCESO" && nota && (
+        <VerificarEnvioAviso
+          documento={nota}
+          motivo={nota.motivoRechazo}
+          firmadoEl={nota.fechaEmision}
+          onVerificado={async (verificada) => {
+            setNota(verificada);
+            if (verificada.facturaAsociadaId) await cargarFactura(verificada.facturaAsociadaId, verificada.id);
+          }}
+        />
       )}
 
       {estadoDte === "RECHAZADO" && nota?.motivoRechazo && (
@@ -384,11 +405,9 @@ export function NotaFormPage() {
                     />
                   </td>
                   <td className="px-3.5 py-2.5">
-                    <input
-                      type="number"
-                      min={0}
+                    <MontoInput
                       value={item.precioUnitario}
-                      onChange={(e) => actualizarItem(item.localId, { precioUnitario: Number(e.target.value) })}
+                      onChange={(v) => actualizarItem(item.localId, { precioUnitario: v ?? 0 })}
                     />
                   </td>
                   <td className="px-3.5 py-2.5">
@@ -458,12 +477,21 @@ export function NotaFormPage() {
 
       <div className="flex justify-end gap-2">
         {esBorrador && factura && (
-          <Button variant="secondary" onClick={guardar} disabled={guardando || superaSaldo}>
-            {guardando ? "Guardando…" : "Guardar borrador"}
+          <Button
+            variant="secondary"
+            onClick={guardar}
+            disabled={guardando || superaSaldo || !hayCambios}
+            title={hayCambios ? undefined : "No hay cambios sin guardar"}
+          >
+            {guardando ? "Guardando…" : hayCambios ? "Guardar borrador" : "Borrador guardado"}
           </Button>
         )}
         {nota && esBorrador && (
-          <Button onClick={confirmarEnvio} disabled={confirmando}>
+          <Button
+            onClick={confirmarEnvio}
+            disabled={confirmando || hayCambios}
+            title={hayCambios ? "Guardá el borrador antes de enviarlo: se envía lo guardado" : undefined}
+          >
             {confirmando ? "Enviando…" : "Confirmar y enviar al SIFEN"}
           </Button>
         )}

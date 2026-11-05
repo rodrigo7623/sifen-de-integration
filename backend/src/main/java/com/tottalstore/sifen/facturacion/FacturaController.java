@@ -65,6 +65,18 @@ public class FacturaController {
         return FacturaResponse.from(facturaService.confirmarEnvio(id));
     }
 
+    /** Resuelve un documento EN_PROCESO (el SIFEN no respondió al enviarlo) consultándolo por CDC. */
+    /** RF-09: vuelve a mandar por correo un documento aprobado (p. ej. después de cargarle el email al cliente). */
+    @PostMapping("/{id}/reenviar-correo")
+    public FacturaResponse reenviarCorreo(@PathVariable UUID id) {
+        return FacturaResponse.from(facturaService.reenviarCorreo(id));
+    }
+
+    @PostMapping("/{id}/verificar")
+    public FacturaResponse verificar(@PathVariable UUID id) {
+        return FacturaResponse.from(facturaService.verificarEnvio(id));
+    }
+
     @PostMapping("/{id}/reabrir")
     public FacturaResponse reabrir(@PathVariable UUID id) {
         return FacturaResponse.from(facturaService.reabrir(id));

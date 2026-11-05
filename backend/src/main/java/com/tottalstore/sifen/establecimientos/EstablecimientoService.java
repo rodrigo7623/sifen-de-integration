@@ -53,6 +53,9 @@ public class EstablecimientoService {
             throw new BusinessException("Ya existe un establecimiento con el código " + request.codigo());
         }
         aplicar(establecimiento, request);
+        if (request.activo() != null) {
+            establecimiento.setActivo(request.activo());
+        }
         return establecimientoRepository.save(establecimiento);
     }
 

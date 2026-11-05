@@ -20,6 +20,7 @@ const FORM_VACIO: ClienteInput = {
   direccion: "",
   email: "",
   condicionIva: "RESPONSABLE_IVA",
+  activo: true,
 };
 
 export function ClientesPage() {
@@ -79,6 +80,7 @@ export function ClientesPage() {
       direccion: cliente.direccion ?? "",
       email: cliente.email ?? "",
       condicionIva: cliente.condicionIva,
+      activo: cliente.activo,
     });
     setErrorFormulario(null);
     setEstadoRuc({ validando: false, mensaje: null, tono: "ok" });
@@ -240,6 +242,7 @@ export function ClientesPage() {
                     }
                   }}
                   placeholder="80012345 o 80012345-6"
+                  maxLength={20}
                   required
                 />
                 {!editandoRuc && (
@@ -258,6 +261,7 @@ export function ClientesPage() {
               <input
                 value={form.razonSocial}
                 onChange={(e) => setForm({ ...form, razonSocial: e.target.value })}
+                maxLength={200}
                 required
               />
             </FormField>
@@ -266,6 +270,7 @@ export function ClientesPage() {
               <input
                 value={form.direccion}
                 onChange={(e) => setForm({ ...form, direccion: e.target.value })}
+                maxLength={250}
               />
             </FormField>
 
@@ -274,6 +279,7 @@ export function ClientesPage() {
                 type="email"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
+                maxLength={150}
               />
             </FormField>
 
@@ -289,6 +295,18 @@ export function ClientesPage() {
                 ))}
               </select>
             </FormField>
+
+            {editandoRuc && (
+              <label className="mb-3 flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="w-auto"
+                  checked={form.activo}
+                  onChange={(e) => setForm({ ...form, activo: e.target.checked })}
+                />
+                Activo (se puede facturar a este cliente)
+              </label>
+            )}
 
             {errorFormulario && <p className="mb-2 text-sm text-rojo">{errorFormulario}</p>}
 

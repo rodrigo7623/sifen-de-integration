@@ -47,6 +47,9 @@ public class ProductoService {
         Producto producto = obtener(codigo);
         validarPrecio(request.precioBase());
         aplicar(producto, request);
+        if (request.activo() != null) {
+            producto.setActivo(request.activo());
+        }
         return productoRepository.save(producto);
     }
 

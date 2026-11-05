@@ -9,6 +9,7 @@ import { type Column, DataTable } from "../../components/ui/DataTable";
 import { FormField } from "../../components/ui/FormField";
 import { Modal } from "../../components/ui/Modal";
 import { useConfirm } from "../../components/ui/ConfirmProvider";
+import { MontoInput } from "../../components/ui/MontoInput";
 import { useToast } from "../../components/ui/ToastProvider";
 import { productosApi, type ProductoInput } from "./api";
 
@@ -16,8 +17,9 @@ const FORM_VACIO: ProductoInput = {
   codigo: "",
   descripcion: "",
   unidadMedida: "UN",
-  precioBase: 0,
+  precioBase: null,
   tasaIva: "DIEZ",
+  activo: true,
 };
 
 export function ProductosPage() {
@@ -68,6 +70,7 @@ export function ProductosPage() {
       unidadMedida: producto.unidadMedida,
       precioBase: producto.precioBase,
       tasaIva: producto.tasaIva,
+      activo: producto.activo,
     });
     setErrorFormulario(null);
     setMostrarFormulario(true);
@@ -186,6 +189,7 @@ export function ProductosPage() {
             <FormField label="Código">
               <input
                 value={form.codigo}
+                maxLength={50}
                 disabled={!!editandoCodigo}
                 onChange={(e) => setForm({ ...form, codigo: e.target.value })}
                 required
@@ -195,6 +199,7 @@ export function ProductosPage() {
             <FormField label="Descripción">
               <input
                 value={form.descripcion}
+                maxLength={200}
                 onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
                 required
               />
@@ -203,18 +208,17 @@ export function ProductosPage() {
             <FormField label="Unidad de medida">
               <input
                 value={form.unidadMedida}
+                maxLength={20}
                 onChange={(e) => setForm({ ...form, unidadMedida: e.target.value })}
                 required
               />
             </FormField>
 
             <FormField label="Precio base (Gs.)">
-              <input
-                type="number"
-                min={0.01}
-                step="0.01"
+              <MontoInput
                 value={form.precioBase}
-                onChange={(e) => setForm({ ...form, precioBase: Number(e.target.value) })}
+                onChange={(v) => setForm({ ...form, precioBase: v })}
+                placeholder="Ej. 280.000"
                 required
               />
             </FormField>
@@ -231,6 +235,18 @@ export function ProductosPage() {
                 ))}
               </select>
             </FormField>
+
+            {editandoCodigo && (
+              <label className="mb-3 flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="w-auto"
+                  checked={form.activo}
+                  onChange={(e) => setForm({ ...form, activo: e.target.checked })}
+                />
+                Activo (disponible para facturar)
+              </label>
+            )}
 
             {errorFormulario && <p className="mb-2 text-sm text-rojo">{errorFormulario}</p>}
 

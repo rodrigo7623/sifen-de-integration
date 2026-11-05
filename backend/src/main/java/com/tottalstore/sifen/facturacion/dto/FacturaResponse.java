@@ -40,10 +40,13 @@ public record FacturaResponse(
         UUID facturaAsociadaId,
         String facturaAsociadaNumero,
         String facturaAsociadaCdc,
-        BigDecimal facturaAsociadaTotal) {
+        BigDecimal facturaAsociadaTotal,
+        /** Email del cliente al que se manda el documento aprobado (RF-09); null si no tiene. */
+        String clienteEmail) {
 
     public static FacturaResponse from(FacturaElectronica f) {
-        boolean rechazada = f.getEstadoDte() == EstadoDte.RECHAZADO;
+        // EN_PROCESO también muestra el último mensaje del SIFEN (por qué hay que verificarlo).
+        boolean rechazada = f.getEstadoDte() == EstadoDte.RECHAZADO || f.getEstadoDte() == EstadoDte.EN_PROCESO;
         FacturaElectronica asociada = f.getFacturaAsociada();
         return new FacturaResponse(
                 f.getId(),
@@ -73,6 +76,7 @@ public record FacturaResponse(
                 asociada != null ? asociada.getId() : null,
                 asociada != null ? asociada.numeroComprobante() : null,
                 asociada != null ? asociada.cdcVigente() : null,
-                asociada != null ? asociada.getTotalGeneral() : null);
+                asociada != null ? asociada.getTotalGeneral() : null,
+                f.getCliente() != null ? f.getCliente().getEmail() : null);
     }
 }

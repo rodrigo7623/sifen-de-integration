@@ -65,8 +65,9 @@ class UsuarioServiceTest {
         existente.setPasswordHash("hash-original");
         when(usuarioRepository.findById(id)).thenReturn(java.util.Optional.of(existente));
         when(usuarioRepository.save(any(Usuario.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(currentUser.obtener()).thenReturn(usuario(UUID.randomUUID(), Rol.ADMIN));
 
-        UsuarioEditarRequest request = new UsuarioEditarRequest("Ana Editada", Rol.ADMIN, null);
+        UsuarioEditarRequest request = new UsuarioEditarRequest("Ana Editada", Rol.ADMIN, null, null);
         Usuario editado = usuarioService.editar(id, request);
 
         assertThat(editado.getNombre()).isEqualTo("Ana Editada");
@@ -83,5 +84,65 @@ class UsuarioServiceTest {
 
         assertThatThrownBy(() -> usuarioService.desactivar(id))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    private static Usuario usuario(UUID id, Rol rol) {
+        Usuario u = new Usuario();
+        u.setId(id);
+        u.setEmail(rol.name().toLowerCase() + "@tottalstore.com");
+        u.setRol(rol);
+        return u;
+    }
+
+    // BUG-011
+    @Test
+    void unAdminNoPuedeQuitarseSuPropioRol() {
+        Usuario admin = usuario(UUID.randomUUID(), Rol.ADMIN);
+        when(usuarioRepository.findById(admin.getId())).thenReturn(java.util.Optional.of(admin));
+        when(currentUser.obtener()).thenReturn(admin);
+
+        assertThatThrownBy(() -> usuarioService.editar(admin.getId(),
+                new UsuarioEditarRequest("Admin", Rol.OPERARIO, null, null)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("propio rol");
+        assertThat(admin.getRol()).isEqualTo(Rol.ADMIN);
+    }
+
+    @Test
+    void noSePuedePasarAOperarioAlUnicoAdminActivo() {
+        Usuario otroAdmin = usuario(UUID.randomUUID(), Rol.ADMIN);
+        when(usuarioRepository.findById(otroAdmin.getId())).thenReturn(java.util.Optional.of(otroAdmin));
+        when(currentUser.obtener()).thenReturn(usuario(UUID.randomUUID(), Rol.OPERARIO));
+        when(usuarioRepository.countByRolAndActivoTrueAndIdNot(Rol.ADMIN, otroAdmin.getId())).thenReturn(0L);
+
+        assertThatThrownBy(() -> usuarioService.editar(otroAdmin.getId(),
+                new UsuarioEditarRequest("Admin", Rol.OPERARIO, null, null)))
+                .hasMessageContaining("al menos un administrador activo");
+    }
+
+    @Test
+    void conOtroAdminActivoSiSePuedeCambiarElRolDeUnAdmin() {
+        Usuario otroAdmin = usuario(UUID.randomUUID(), Rol.ADMIN);
+        when(usuarioRepository.findById(otroAdmin.getId())).thenReturn(java.util.Optional.of(otroAdmin));
+        when(currentUser.obtener()).thenReturn(usuario(UUID.randomUUID(), Rol.ADMIN));
+        when(usuarioRepository.countByRolAndActivoTrueAndIdNot(Rol.ADMIN, otroAdmin.getId())).thenReturn(1L);
+        when(usuarioRepository.save(any(Usuario.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Usuario editado = usuarioService.editar(otroAdmin.getId(),
+                new UsuarioEditarRequest("Ex admin", Rol.OPERARIO, null, null));
+
+        assertThat(editado.getRol()).isEqualTo(Rol.OPERARIO);
+    }
+
+    @Test
+    void noSePuedeDesactivarAlUnicoAdminActivo() {
+        Usuario otroAdmin = usuario(UUID.randomUUID(), Rol.ADMIN);
+        when(usuarioRepository.findById(otroAdmin.getId())).thenReturn(java.util.Optional.of(otroAdmin));
+        when(currentUser.obtener()).thenReturn(usuario(UUID.randomUUID(), Rol.OPERARIO));
+        when(usuarioRepository.countByRolAndActivoTrueAndIdNot(Rol.ADMIN, otroAdmin.getId())).thenReturn(0L);
+
+        assertThatThrownBy(() -> usuarioService.desactivar(otroAdmin.getId()))
+                .hasMessageContaining("al menos un administrador activo");
+        assertThat(otroAdmin.isActivo()).isTrue();
     }
 }

@@ -115,6 +115,23 @@ class GeneradorDteSifenTest {
     }
 
     @Test
+    void unaOcurrenciaDeGActEcoPorActividadConLaPrincipalPrimero() throws Exception {
+        ConfiguracionEmisor emisor = emisorCompleto();
+        emisor.getActividadesEconomicas().add(new com.tottalstore.sifen.configuracion.ActividadEconomicaEmisor(
+                emisor, "46900", "Venta al por mayor", false, 0));
+        emisor.getActividadesEconomicas().add(new com.tottalstore.sifen.configuracion.ActividadEconomicaEmisor(
+                emisor, "47521", "Ferretería", true, 1));
+        when(repositorio.findAll()).thenReturn(List.of(emisor));
+
+        Document doc = parsear(generador.generar(factura(), Ambiente.TEST).xmlFirmado());
+
+        var codigos = doc.getElementsByTagNameNS(NS, "cActEco");
+        assertThat(codigos.getLength()).isEqualTo(2);
+        assertThat(codigos.item(0).getTextContent()).isEqualTo("47521");
+        assertThat(codigos.item(1).getTextContent()).isEqualTo("46900");
+    }
+
+    @Test
     void calculaTotalesEIvaComoIndicaElManual() throws Exception {
         Document doc = parsear(generador.generar(factura(), Ambiente.TEST).xmlFirmado());
 
