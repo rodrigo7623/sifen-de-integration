@@ -38,6 +38,9 @@ public class DeXmlBuilder {
     private static final DateTimeFormatter FECHA_HORA = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
     /** D105: en el ambiente de prueba el nombre del emisor debe ser este literal. */
     static final String NOMBRE_EMISOR_TEST = "DE generado en ambiente de prueba - sin valor comercial ni fiscal";
+
+    /** Guía de Pruebas para el Sistema e-Kuatia (DNIT): descripción obligatoria del primer ítem en el ambiente de prueba. */
+    static final String DESCRIPCION_PRIMER_ITEM_TEST = "DOCUMENTO ELECTRÓNICO SIN VALOR COMERCIAL NI FISCAL - GENERADO EN AMBIENTE DE PRUEBA";
     private static final int DECIMALES = 8;
 
     /** Datos de cálculo que el QR (sección 13.8) necesita leer del DE ya armado. */
@@ -126,7 +129,7 @@ public class DeXmlBuilder {
         }
         int indice = 0;
         for (ItemFactura item : factura.getItems()) {
-            agregarItem(gDtipDE, item, ++indice);
+            agregarItem(gDtipDE, item, ++indice, ambiente);
         }
 
         // F. Totales
@@ -259,10 +262,12 @@ public class DeXmlBuilder {
     }
 
     /** E8: ítem, con su valor (E8.1) y su IVA (E8.2). */
-    private void agregarItem(Element gDtipDE, ItemFactura item, int indice) {
+    private void agregarItem(Element gDtipDE, ItemFactura item, int indice, Ambiente ambiente) {
         Element gCamItem = hijo(gDtipDE, "gCamItem");
         el(gCamItem, "dCodInt", item.getProducto() != null ? recortar(item.getProducto().getCodigo(), 20) : "ITEM-" + indice);
-        el(gCamItem, "dDesProSer", recortar(item.getDescripcion(), 120));
+        // Guía de Pruebas e-Kuatia (DNIT, 2026): en el ambiente de prueba el primer ítem lleva este texto.
+        String descripcion = ambiente == Ambiente.TEST && indice == 1 ? DESCRIPCION_PRIMER_ITEM_TEST : item.getDescripcion();
+        el(gCamItem, "dDesProSer", recortar(descripcion, 120));
         el(gCamItem, "cUniMed", "77");
         el(gCamItem, "dDesUniMed", "UNI");
         el(gCamItem, "dCantProSer", String.valueOf(item.getCantidad()));

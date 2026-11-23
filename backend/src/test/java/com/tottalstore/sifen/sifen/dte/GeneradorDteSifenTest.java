@@ -115,6 +115,19 @@ class GeneradorDteSifenTest {
     }
 
     @Test
+    void enAmbienteDeTestElPrimerItemLlevaElTextoDeLaGuiaDePruebas() throws Exception {
+        Document test = parsear(generador.generar(factura(), Ambiente.TEST).xmlFirmado());
+        Document produccion = parsear(generador.generar(factura(), Ambiente.PRODUCCION).xmlFirmado());
+
+        var test1 = test.getElementsByTagNameNS(NS, "dDesProSer");
+        assertThat(test1.item(0).getTextContent())
+                .isEqualTo("DOCUMENTO ELECTRÓNICO SIN VALOR COMERCIAL NI FISCAL - GENERADO EN AMBIENTE DE PRUEBA");
+        assertThat(test1.item(1).getTextContent()).isEqualTo(factura().getItems().get(1).getDescripcion());
+        assertThat(produccion.getElementsByTagNameNS(NS, "dDesProSer").item(0).getTextContent())
+                .isEqualTo(factura().getItems().get(0).getDescripcion());
+    }
+
+    @Test
     void unaOcurrenciaDeGActEcoPorActividadConLaPrincipalPrimero() throws Exception {
         ConfiguracionEmisor emisor = emisorCompleto();
         emisor.getActividadesEconomicas().add(new com.tottalstore.sifen.configuracion.ActividadEconomicaEmisor(
@@ -215,7 +228,7 @@ class GeneradorDteSifenTest {
         FacturaElectronica factura = factura();
         factura.getItems().get(0).setDescripcion("Llave <12mm> & tuerca");
 
-        DteFirmado dte = generador.generar(factura, Ambiente.TEST);
+        DteFirmado dte = generador.generar(factura, Ambiente.PRODUCCION);
 
         assertThat(dte.xmlFirmado()).contains("Llave &lt;12mm&gt; &amp; tuerca");
         assertThat(texto(parsear(dte.xmlFirmado()), "dDesProSer")).isEqualTo("Llave <12mm> & tuerca");
