@@ -15,6 +15,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -25,6 +26,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> handleNotFound(NotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiError.of(404, "NOT_FOUND", ex.getMessage()));
+    }
+
+    /** Ruta de la API que no existe: 404, no un 500 "error inesperado" (BUG-024). */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiError> handleNoResource(NoResourceFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiError.of(404, "NOT_FOUND", "No existe el recurso /" + ex.getResourcePath()));
     }
 
     @ExceptionHandler(BusinessException.class)

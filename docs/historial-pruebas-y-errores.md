@@ -90,6 +90,10 @@ para la documentación de implementación. Centraliza lo que antes estaba en
 | 05/11/2026 | R3 | Integración local (modo real) | Migración `V10__registro_comprobantes_rg90` y script `http-rg90.js` (23 verificaciones): BUG-010, BUG-011, catálogo RG 90, alta/duplicado/validaciones de compras, compra con CDC, venta con ticket sin nombre, Libro IVA Compras y Ventas, liquidación, Excel y PDF del libro de compras, ZIP RG 90 y borrado de lo creado | **23 / 23 OK**. V10 aplicada en 0,08 s. Primer intento 22/23 por una aserción mal planteada (ver B9). El ZIP `4309652_REG_112026_T0001.zip` contiene un TXT con 2 filas (venta de 19 campos, compra de 20) y deja fuera la compra con CDC |
 | 05/11/2026 | R3 | Visual | PDF del Libro IVA Compras renderizado a PNG | OK: título, "RUC prov."/"Proveedor", siglas FAC, totales y "IVA crédito fiscal del período" |
 | 05/11/2026 | R3 | Build frontend | `tsc -b` + `vite build` con la pantalla *Compras y otros comprobantes* y *Libros IVA* con pestañas Ventas / Compras / Liquidación y RG 90 | OK |
+| 05/11/2026 | R3 | Funcional E2E (modo real, video) | Grabación con Playwright + Edge de 6 clips para la presentación: panel de estado, documento rechazado reabierto y reenviado, auditoría, factura nueva, nota de crédito, compra + Libros IVA + liquidación + ZIP RG 90 | Todo OK contra el SIFEN de test: la factura rechazada el 27/10 (0140) se reabrió y salió **0260**; las facturas `001-001-0000007` a `0000011` y las NC `0000006` y `0000007` aprobadas en 2,1 a 2,6 s desde *Confirmar*. Aparecieron BUG-023 y BUG-024 |
+| 05/11/2026 | R3 | Unitarias | `mvn test` tras corregir BUG-023 y BUG-024 | **161 / 161 OK** |
+| 23/11/2026 | R3 | Cobertura | `mvn test` con JaCoCo 0.8.12 (`prepare-agent` + `report`, sin cambiar el pom) | 161 / 161 OK. Cobertura total: **69,6 % de líneas**, 70,9 % de instrucciones y 60,0 % de ramas. Por paquete (líneas): reportes 88,9 %, dashboard 87,9 %, facturación 82,1 %, clientes 78,2 %, registro 73,7 %, configuración 71,8 %, email 67,5 %, sifen 67,2 %, seguridad 64,7 %, auditoría 40,3 %, auth 39,1 %, catálogo 38,8 %, establecimientos 35,3 %; config y common (configuración de Spring y manejador de errores) sin pruebas unitarias |
+| 23/11/2026 | R3 | Rendimiento | `carga.js` (Node, fetch concurrente) contra el backend en modo stub, puerto 8081, esquema aislado `perf_tfg`, misma máquina que PostgreSQL. 30 s por escenario con la mezcla 40 % listar facturas, 25 % crear + confirmar, 15 % dashboard, 10 % Libro IVA y 10 % buscar clientes | 1.ª corrida: 106 de 243 confirmaciones en 409 (ver BUG-025). Corregido: **10 usuarios** 37,2 pedidos/s, promedio 265 ms, p95 563 ms; **50 usuarios** 26,0 pedidos/s, promedio 1,85 s, p95 3,6 s; **100 usuarios** 22,4 pedidos/s, promedio 4,2 s, p95 7,5 s. **0 errores**. Confirmar (firma + envío stub): 34 ms promedio con 10 usuarios. Ver H-15 |
 
 ---
 
@@ -126,6 +130,9 @@ para la documentación de implementación. Centraliza lo que antes estaba en
 | BUG-020 | R3 | PDF del Libro IVA: la condición de las NC pisa el monto y FE/NC con igual número no se distinguen | Media | Corregido |
 | BUG-021 | R3 | *Verificar en el SIFEN* reenvía el DE aunque pasaron más de 72 h desde la firma | Media | Corregido |
 | BUG-022 | R3 | `PUT /api/configuracion/emisor` no valida el request (`@Valid` faltante) | Baja | Corregido |
+| BUG-023 | R3 | El ZIP de la RG 90 se descarga con un nombre genérico en vez del que exige la DNIT | Media | Corregido |
+| BUG-024 | R3 | Una ruta inexistente de la API devuelve 500 en vez de 404 | Baja | Corregido |
+| BUG-025 | R3 | Dos confirmaciones simultáneas en el mismo punto de expedición obtienen el mismo número | Alta | Corregido |
 
 **Patrón recurrente:** A2 y C1 son el mismo defecto (relación `@ManyToOne` LAZY leída fuera de la
 transacción con `open-in-view=false`). Revisarlo en todo DTO nuevo que lea una relación.
@@ -506,6 +513,42 @@ cómo), **Ubicación**, **Síntoma**, **Causa**, **Corrección** (archivos y com
 - **Verificación:** por HTTP: 400 con "El número de timbrado es numérico…", "El dígito verificador va de 0 a 9" y "El código de departamento es numérico…".
 - **Corregido:** 05/11/2026
 
+#### BUG-023 — El ZIP de la RG 90 se descarga con un nombre genérico en vez del que exige la DNIT
+
+- **Estado:** Corregido
+- **Severidad:** Media
+- **Detectado:** 05/11/2026, al grabar el clip de *Libros IVA* para la presentación (Playwright + Edge)
+- **Ubicación:** `config/CorsConfig.java`
+- **Síntoma:** el botón *Descargar archivo para Marangatu* guardaba `registro-comprobantes-2026-11.zip`. La Especificación de la DNIT exige que el ZIP se llame igual que el TXT (`<RUC>_REG_MMAAAA_XXXXX`).
+- **Causa:** el backend manda el nombre correcto en `Content-Disposition`, pero la configuración CORS no lo exponía (`Access-Control-Expose-Headers`), así que el navegador no dejaba leerlo y el frontend usaba su nombre de respaldo. La prueba `http-rg90.js` leía la cabecera desde Node, sin CORS, y por eso no lo detectó.
+- **Corrección:** `CorsConfig` expone `Content-Disposition`.
+- **Verificación:** con `Origin: http://localhost:5173` la respuesta trae `Access-Control-Expose-Headers: Content-Disposition`. Desde la interfaz se descargó `4309652_REG_112026_T0007.zip`.
+- **Corregido:** 05/11/2026
+
+#### BUG-024 — Una ruta inexistente de la API devuelve 500 en vez de 404
+
+- **Estado:** Corregido
+- **Severidad:** Baja
+- **Detectado:** 05/11/2026, al relevar métricas para la presentación (`GET /api/dashboard`)
+- **Ubicación:** `common/GlobalExceptionHandler.java`
+- **Síntoma:** cualquier ruta que no existe respondía 500 "Ocurrió un error inesperado" y dejaba un stack trace de `NoResourceFoundException` en el log.
+- **Causa:** el manejador genérico de `Exception` atrapaba también la `NoResourceFoundException` de Spring 6.1.
+- **Corrección:** manejador propio que responde 404 `NOT_FOUND` "No existe el recurso …".
+- **Verificación:** `GET /api/noexiste` con token → 404; sin token sigue en 401. `mvn test`: 161 / 161 OK.
+- **Corregido:** 05/11/2026
+
+#### BUG-025 — Dos confirmaciones simultáneas en el mismo punto de expedición obtienen el mismo número
+
+- **Estado:** Corregido
+- **Severidad:** Alta
+- **Detectado:** 23/11/2026, en la prueba de rendimiento para el TFG. Con 10 usuarios concurrentes, 106 de 243 confirmaciones respondieron 409 `DUPLICADO`.
+- **Ubicación:** `establecimientos/PuntoExpedicionRepository` y `FacturaService.asignarNumeroDocumento`
+- **Síntoma:** al confirmar a la vez varias facturas distintas del mismo punto de expedición, una sola se aprobaba. Las demás fallaban con `llave duplicada viola restricción de unicidad «idx_factura_numeracion»`, con el mismo número (p. ej. 142). La restricción única evitaba números repetidos en la base, pero en modo real el error puede llegar al guardar, **después** de haber enviado el DE al SIFEN.
+- **Causa:** la consulta con `@Lock(PESSIMISTIC_WRITE)` no protegía la lectura. El punto de expedición trae su establecimiento con un outer join y PostgreSQL no admite `FOR UPDATE` en esa consulta, así que Hibernate lee la fila sin bloqueo y recién después la bloquea con un `select id … for update` aparte (*follow-on locking*). Además, la factura ya tenía el punto cargado (EAGER), así que se usaba el último número leído antes del bloqueo. El SQL registrado lo confirmó. Un primer intento con `refresh(punto, PESSIMISTIC_WRITE)` produjo el mismo orden y no lo resolvió.
+- **Corrección:** fragmento `PuntoExpedicionNumerador.bloquearParaNumerar`: primero `entityManager.lock(punto, PESSIMISTIC_WRITE)` (espera a la otra transacción) y después `entityManager.refresh(punto)` para releer el último número ya comprometido.
+- **Verificación:** 3 rondas de 6 confirmaciones simultáneas → **18 / 18 aprobadas**, con 18 `select … for update` y 18 `update punto_expedicion` en el log. Prueba de carga posterior con 10, 50 y 100 usuarios: 0 errores. `mvn test`: 161 / 161 OK.
+- **Corregido:** 23/11/2026
+
 ---
 
 ## 3. Ajustes a la suite de pruebas
@@ -798,3 +841,11 @@ Todos detectados en Release 1, al automatizar la colección de Postman con Newma
   - Pantallas: *Compras y otros comprobantes*, y *Libros IVA* con pestañas.
 - **Pendiente de validar:** importar un archivo real en Marangatu con el RUC de Tottal Store. Eso
   solo se puede hacer con su clave de acceso, y la SET puede tardar hasta 72 h en validarlo.
+
+### H-15 — El listado de facturas y el dashboard cargan todos los documentos en memoria
+
+- **Fecha:** 23/11/2026, en la prueba de rendimiento para el TFG.
+- **Observación:** con pocos documentos, *Listar facturas* tardaba 154 ms con 10 usuarios. Con unas 700 facturas en el esquema de prueba pasó a 485 ms, y el dashboard a 456 ms. En cambio, *Buscar clientes* (9 ms) y *Crear borrador* (17 ms) no cambian con el volumen. El rendimiento total baja de 37 a 22 pedidos/s entre 10 y 100 usuarios, sin errores.
+- **Causa:** `GET /api/facturas` devuelve todos los documentos y la paginación se hace en el frontend. `DashboardService` calcula los indicadores sobre `findAll()`.
+- **Impacto:** para el volumen de Tottal Store (40–60 facturas por día, unas 1.100 por mes) sigue respondiendo por debajo de 1 s con 10 usuarios simultáneos. Con años de historia el tiempo crece linealmente.
+- **Recomendación:** paginar en la base (`Pageable`, con filtros por fecha) y calcular los indicadores con consultas agregadas (`count` y `sum` por estado y mes).

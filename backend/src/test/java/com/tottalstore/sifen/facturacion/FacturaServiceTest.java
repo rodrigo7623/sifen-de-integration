@@ -201,7 +201,7 @@ class FacturaServiceTest {
         factura.getItems().add(item(1, "100000", TasaIva.DIEZ));
 
         when(facturaRepository.findByIdParaActualizar(id)).thenReturn(java.util.Optional.of(factura));
-        when(puntoExpedicionRepository.findByIdParaNumerar(punto.getId())).thenReturn(java.util.Optional.of(punto));
+        when(puntoExpedicionRepository.bloquearParaNumerar(punto.getId())).thenReturn(java.util.Optional.of(punto));
         when(generadorDteService.generar(any(), any()))
                 .thenReturn(new DteFirmado("<rDE/>", Instant.now(), "0".repeat(44), "123456789"));
         when(enviadorSifenService.enviar(any(), any(), any()))
@@ -389,7 +389,7 @@ class FacturaServiceTest {
 
         when(facturaRepository.findByIdParaActualizar(nota.getId())).thenReturn(java.util.Optional.of(nota));
         when(facturaRepository.findByFacturaAsociadaIdOrderByFechaEmisionAsc(factura.getId())).thenReturn(List.of(nota));
-        when(puntoExpedicionRepository.findByIdParaNumerar(punto.getId())).thenReturn(java.util.Optional.of(punto));
+        when(puntoExpedicionRepository.bloquearParaNumerar(punto.getId())).thenReturn(java.util.Optional.of(punto));
         when(generadorDteService.generar(any(), any()))
                 .thenReturn(new DteFirmado("<rDE/>", Instant.now(), "05" + "0".repeat(42), "123456789"));
         when(enviadorSifenService.enviar(any(), any(), any()))

@@ -542,7 +542,7 @@ public class FacturaService {
         if (factura.getNumeroDocumento() != null) {
             return;
         }
-        PuntoExpedicion punto = puntoExpedicionRepository.findByIdParaNumerar(factura.getPuntoExpedicion().getId())
+        PuntoExpedicion punto = puntoExpedicionRepository.bloquearParaNumerar(factura.getPuntoExpedicion().getId())
                 .orElseThrow(() -> new NotFoundException("Punto de expedición no encontrado"));
         int siguiente;
         switch (factura.getTipoDoc()) {
