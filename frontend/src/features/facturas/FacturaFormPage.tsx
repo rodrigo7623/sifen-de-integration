@@ -28,6 +28,7 @@ import { useConfirm } from "../../components/ui/ConfirmProvider";
 import { useToast } from "../../components/ui/ToastProvider";
 import { descargarArchivo, facturasApi, nombreArchivo, type FacturaInput, type ItemFacturaInput } from "./api";
 import { calcularTotales, subtotalItem } from "./totales";
+import { EventosSifenAcciones } from "./EventosSifenAcciones";
 import { resultadoEnvio, VerificarEnvioAviso } from "./VerificarEnvioAviso";
 
 interface FilaItem extends ItemFacturaInput {
@@ -117,7 +118,7 @@ export function FacturaFormPage() {
 
   const esBorrador = estadoDte === null || estadoDte === "BORRADOR";
   const esRechazada = estadoDte === "RECHAZADO";
-  const puedeDescargar = estadoDte === "APROBADO" || estadoDte === "RECHAZADO" || estadoDte === "ANULADO";
+  const puedeDescargar = estadoDte !== null && ["APROBADO", "RECHAZADO", "ANULADO", "CANCELADO", "INUTILIZADO"].includes(estadoDte);
 
   useEffect(() => {
     (async () => {
@@ -374,6 +375,13 @@ export function FacturaFormPage() {
             {reabriendo ? "Reabriendo…" : "Reabrir para corregir"}
           </Button>
         </div>
+      )}
+
+      {facturaId && (
+        <EventosSifenAcciones
+          documento={{ id: facturaId, estadoDte, tipoDocumento: "FE", fechaEmision, numero }}
+          onActualizado={async () => aplicarEstadoSifen(await facturasApi.obtener(facturaId))}
+        />
       )}
 
       {facturaId && estadoDte === "EN_PROCESO" && (

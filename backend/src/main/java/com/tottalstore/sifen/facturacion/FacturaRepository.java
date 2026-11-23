@@ -28,6 +28,9 @@ public interface FacturaRepository extends JpaRepository<FacturaElectronica, UUI
     /** Notas de crédito/débito emitidas sobre una factura (M6). */
     List<FacturaElectronica> findByFacturaAsociadaIdOrderByFechaEmisionAsc(UUID facturaAsociadaId);
 
+    /** Documentos enviados en un lote asíncrono (siRecepLoteDE). */
+    List<FacturaElectronica> findByLoteIdOrderByNumeroDocumentoAsc(UUID loteId);
+
     @Query("select f from FacturaElectronica f where f.estadoDte in :estados"
             + " and f.fechaEmision >= :desde and f.fechaEmision < :hasta order by f.fechaEmision")
     List<FacturaElectronica> findEmitidasEntre(

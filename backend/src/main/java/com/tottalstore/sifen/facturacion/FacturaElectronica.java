@@ -4,6 +4,7 @@ import com.tottalstore.sifen.auth.Usuario;
 import com.tottalstore.sifen.clientes.Cliente;
 import com.tottalstore.sifen.establecimientos.Establecimiento;
 import com.tottalstore.sifen.establecimientos.PuntoExpedicion;
+import com.tottalstore.sifen.sifen.LoteSifen;
 import com.tottalstore.sifen.sifen.RespuestaSifen;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -130,6 +131,11 @@ public class FacturaElectronica {
     // XML firmado fuera de la transacción que cargó la factura; es un OneToOne, sin riesgo de N+1.
     @OneToOne(mappedBy = "factura", fetch = FetchType.EAGER)
     private RespuestaSifen respuestaSifen;
+
+    /** Lote asíncrono (siRecepLoteDE) en el que se envió; null si fue por el WS sincrónico. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "lote_id")
+    private LoteSifen lote;
 
     /** Número impreso del comprobante (establecimiento-punto-número, p. ej. 001-001-0000001), o
      * null si todavía no se le asignó número (borrador nunca confirmado). */

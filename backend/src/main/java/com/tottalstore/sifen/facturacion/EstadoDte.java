@@ -10,5 +10,9 @@ public enum EstadoDte {
     RECHAZADO,
     EN_PROCESO,
     EN_CORRECCION,
-    ANULADO
+    ANULADO,
+    /** Cancelado por el emisor con el evento de cancelación del SIFEN (11.5.1): sin efecto fiscal. */
+    CANCELADO,
+    /** DE rechazado cuyo número se inutilizó en el SIFEN con el evento de inutilización: no se reenvía. */
+    INUTILIZADO
 }

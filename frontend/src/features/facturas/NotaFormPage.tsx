@@ -21,6 +21,7 @@ import { descargarArchivo, facturasApi, nombreArchivo, type ItemFacturaInput } f
 import { MontoInput } from "../../components/ui/MontoInput";
 import { EstadoCorreo } from "./EstadoCorreo";
 import { calcularTotales, subtotalItem } from "./totales";
+import { EventosSifenAcciones } from "./EventosSifenAcciones";
 import { resultadoEnvio, VerificarEnvioAviso } from "./VerificarEnvioAviso";
 
 interface FilaItem extends ItemFacturaInput {
@@ -78,7 +79,7 @@ export function NotaFormPage() {
 
   const estadoDte = nota?.estadoDte ?? null;
   const esBorrador = estadoDte === null || estadoDte === "BORRADOR";
-  const puedeDescargar = estadoDte === "APROBADO" || estadoDte === "RECHAZADO";
+  const puedeDescargar = !!estadoDte && ["APROBADO", "RECHAZADO", "CANCELADO", "INUTILIZADO"].includes(estadoDte);
 
   async function cargarFactura(facturaId: string, notaId: string | null) {
     const [f, notas] = await Promise.all([facturasApi.obtener(facturaId), facturasApi.notas(facturaId)]);
@@ -239,6 +240,17 @@ export function NotaFormPage() {
           {nota.cdc && <span className="font-mono text-xs text-texto-suave">CDC {nota.cdc}</span>}
           <EstadoCorreo documento={nota} onActualizado={setNota} />
         </p>
+      )}
+
+      {nota && (
+        <EventosSifenAcciones
+          documento={nota}
+          onActualizado={async () => {
+            const actualizada = await facturasApi.obtener(nota.id);
+            setNota(actualizada);
+            if (actualizada.facturaAsociadaId) await cargarFactura(actualizada.facturaAsociadaId, actualizada.id);
+          }}
+        />
       )}
 
       {estadoDte === "EN_PROCESO" && nota && (

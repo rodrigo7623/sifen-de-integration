@@ -94,9 +94,12 @@ public class FacturaPdfGenerator {
     // --- Secciones -------------------------------------------------------------------------------
 
     private void aviso(Lienzo l, KudeDatos d, EstadoDte estado) throws IOException {
-        String texto = estado == EstadoDte.APROBADO
-                ? "VISTA PREVIA: documento sin XML firmado del SIFEN. Sin validez fiscal."
-                : "DOCUMENTO NO APROBADO POR EL SIFEN (estado " + estado + "). Sin validez fiscal.";
+        String texto = switch (estado) {
+            case APROBADO -> "VISTA PREVIA: documento sin XML firmado del SIFEN. Sin validez fiscal.";
+            case CANCELADO -> "DOCUMENTO CANCELADO EN EL SIFEN (evento de cancelación). Sin validez fiscal.";
+            case INUTILIZADO -> "NÚMERO INUTILIZADO EN EL SIFEN. Documento sin validez fiscal.";
+            default -> "DOCUMENTO NO APROBADO POR EL SIFEN (estado " + estado + "). Sin validez fiscal.";
+        };
         l.cs.setNonStrokingColor(ROJO);
         texto(l.cs, FONT_BOLD, 10, MARGEN, l.y, texto);
         l.cs.setNonStrokingColor(Color.BLACK);

@@ -97,6 +97,9 @@ para la documentación de implementación. Centraliza lo que antes estaba en
 | 23/11/2026 | R3 | Unitarias | `mvn test` tras agregar el texto obligatorio del primer ítem en ambiente de prueba (`GeneradorDteSifenTest` +1; la prueba de escape de caracteres pasa a usar producción) | **162 / 162 OK** |
 | 23/11/2026 | R3 | Habilitación SIFEN (Guía de Pruebas e-Kuatia) | Script `pruebas-sifen.js` (en TFG/fuente/habilitacion) contra el SIFEN de test vía la API, con el certificado real: 4.2 sincrónico aprobado (5 FE con 2 ítems, 5 NC, 5 ND), 4.2 sincrónico rechazado (5 FE, 5 NC y 5 ND con 5 errores distintos del emisor: timbrado, vigencia, código y descripción de actividad, departamento/ciudad), 4.4 consulta por CDC (3 FE, 3 NC, 3 ND), 4.5 KuDE (1 por tipo) y QR (2 por tipo). La configuración del emisor se restauró al terminar | **48 / 48 OK**. Primeras notas de débito reales aprobadas (`001-001-0000001` a `0000005`). Rechazos 1101, 1107, 1261, 1262 y relación departamento/distrito/ciudad. Consultas 0422. El QR abre e-Kuatia de test con todos los datos cargados; el resultado final exige un reCAPTCHA y se verifica a mano (ver H-16) |
 | 23/11/2026 | R3 | Habilitación SIFEN | Guía 4.1 (recomendable): `siConsRUC` con un certificado autogenerado y sin certificado de cliente (`cert-invalido.js`) | Ambos: **HTTP 302 a `/vdesk/hangup.php3`**, el SIFEN corta la sesión. En la misma corrida, el certificado real respondió 0422 en todas las consultas |
+| 23/11/2026 | R3 | Unitarias | `mvn test` tras implementar eventos (cancelación, inutilización) y envío por lote: `GeneradorEventoSifenTest` (3), `EventosLotesSifenSoapTest` (7), `EventosServiceTest` (9), `LoteServiceTest` (7) | **188 / 188 OK** |
+| 23/11/2026 | R3 | Habilitación SIFEN (Guía 4.3, eventos del emisor) | `pruebas-grupo2.js` contra el SIFEN de test: cancelación de 3 FE, 1 NC y 1 ND aprobadas el mismo día; inutilización del número de 2 FE, 1 NC y 1 ND rechazadas en el grupo 1 | Primera corrida: **5 cancelaciones rechazadas con 0160 «XML mal formado»** (BUG-026). Tras corregirlo: **5 / 5 cancelaciones aprobadas (0600)**, protocolos 1178104 a 1178108; una necesitó reintento por un 0100 «Error inesperado» del SIFEN. **4 / 4 inutilizaciones aprobadas (0600)**: FE 0000017 y 0000018, NC 0000013, ND 0000006 |
+| 23/11/2026 | R3 | Habilitación SIFEN (Guía 4.2, asincrónico) | `pruebas-grupo2.js`: 1 lote por tipo con 5 DE correctos (FE con 2 ítems) y 1 lote por tipo con 5 DE firmados cada uno con un error distinto del emisor, por `siRecepLoteDE` y consulta con `siResultLoteDE` cada 20 s | **36 / 36 OK**. Los 6 lotes recibidos (0300) y procesados en la primera consulta (0362). Aprobados: FE 0000026–0000030, NC 0000019–0000023, ND 0000012–0000016. Rechazados con 1101, 1107, 1261, 1262 y 1255 (departamento/distrito/ciudad) en cada tipo. La configuración del emisor se restauró después de cada lote |
 
 ---
 
@@ -136,6 +139,7 @@ para la documentación de implementación. Centraliza lo que antes estaba en
 | BUG-023 | R3 | El ZIP de la RG 90 se descarga con un nombre genérico en vez del que exige la DNIT | Media | Corregido |
 | BUG-024 | R3 | Una ruta inexistente de la API devuelve 500 en vez de 404 | Baja | Corregido |
 | BUG-025 | R3 | Dos confirmaciones simultáneas en el mismo punto de expedición obtienen el mismo número | Alta | Corregido |
+| BUG-026 | R3 | El SIFEN rechaza los eventos con 0160 «XML mal formado» aunque el evento valida contra el XSD | Alta | Corregido |
 
 **Patrón recurrente:** A2 y C1 son el mismo defecto (relación `@ManyToOne` LAZY leída fuera de la
 transacción con `open-in-view=false`). Revisarlo en todo DTO nuevo que lea una relación.
@@ -552,6 +556,18 @@ cómo), **Ubicación**, **Síntoma**, **Causa**, **Corrección** (archivos y com
 - **Verificación:** 3 rondas de 6 confirmaciones simultáneas → **18 / 18 aprobadas**, con 18 `select … for update` y 18 `update punto_expedicion` en el log. Prueba de carga posterior con 10, 50 y 100 usuarios: 0 errores. `mvn test`: 161 / 161 OK.
 - **Corregido:** 23/11/2026
 
+#### BUG-026 — El SIFEN rechaza los eventos con 0160 «XML mal formado» aunque el evento valida contra el XSD
+
+- **Estado:** Corregido
+- **Severidad:** Alta
+- **Detectado:** 23/11/2026, en la primera corrida de cancelaciones de la Guía de Pruebas (4.3) contra el SIFEN de test: 5 de 5 rechazadas.
+- **Ubicación:** `sifen/dte/GeneradorEventoSifen` y `sifen/EventosLotesSifenSoap.enviarEvento`
+- **Síntoma:** `siRecepEvento` respondía `dEstRes` Rechazado, `dCodRes` 0160 «XML mal formado» e `id` 0, o sea, ni siquiera llegaba a leer el `Id` del `rEve`. El `gGroupGesEve` generado validaba sin errores contra `siRecepEvento_v150.xsd` (descargado de ekuatia.set.gov.py, validado con `javax.xml.validation`), así que el problema no era la estructura del evento.
+- **Causa:** el prefijo `xsi` del `xsi:schemaLocation` de `rGesEve` estaba declarado solo en el padre (`gGroupGesEve`), y el `gGroupGesEve` repetía el `xmlns` del SIFEN que ya declara `rEnviEventoDe`. El SIFEN procesa el `rGesEve` por separado, y ahí el prefijo queda sin declarar. El Manual Técnico (7.2.2) pide un solo namespace por raíz y no muestra dónde va la declaración.
+- **Corrección:** `xmlns:xsi` y `xsi:schemaLocation` también en `rGesEve` (y `schemaLocation` en `gGroupGesEve`); al armar el sobre se quita el `xmlns` repetido del `gGroupGesEve`. La firma no cambia: cubre el `rEve` con exclusive C14N.
+- **Verificación:** la misma cancelación reenviada → **0600 «Evento registrado correctamente»** (protocolo 1178104). Después, 5 / 5 cancelaciones y 4 / 4 inutilizaciones aprobadas. `mvn test`: 188 / 188 OK.
+- **Corregido:** 23/11/2026
+
 ---
 
 ## 3. Ajustes a la suite de pruebas
@@ -858,5 +874,7 @@ Todos detectados en Release 1, al automatizar la colección de Postman con Newma
 - **Fuente:** https://www.dnit.gov.py/documents/20123/424160/Guia+de+Pruebas+para+e-kuatia.pdf
 - **Qué pide:** pruebas mínimas sugeridas en el ambiente de prueba, con una «Cantidad mínima» por escenario. Por cada tipo de documento (FE, NC, ND, autofactura y nota de remisión): 5 aprobados y 5 rechazados por el servicio sincrónico, lo mismo por el asincrónico (en lote), 3 consultas por CDC, 1 KuDE y 2 consultas por QR. Además: eventos del emisor (5 cancelaciones; inutilización de 2 FE, 1 NC, 1 ND y 1 autofactura), eventos del receptor (3 de conformidad, disconformidad, desconocimiento, notificación y ajuste) y la comunicación con todos los servicios web, con certificado válido y no válido.
 - **Regla de datos:** en el ambiente de prueba, el primer ítem de cada documento debe decir «DOCUMENTO ELECTRÓNICO SIN VALOR COMERCIAL NI FISCAL - GENERADO EN AMBIENTE DE PRUEBA». El sistema no lo hacía; se agregó el 23/11/2026 (DeXmlBuilder, solo en TEST).
-- **Estado al 23/11/2026:** cumplidos FE, NC y ND sincrónicos (aprobados y rechazados), las consultas por CDC, el KuDE, la carga del QR y la prueba con certificado no válido. Pendientes: **confirmar a mano las 6 consultas por QR** (requieren reCAPTCHA); **envío asincrónico por lote** (siRecepLoteDE y consulta de resultado); **eventos de cancelación e inutilización**; **eventos del receptor**; **autofactura y nota de remisión**. Hay que confirmar con la DNIT si estos dos últimos tipos corresponden a un contribuyente que no los emite.
-- **Evidencia:** TFG/fuente/habilitacion/evidencia-2026-11-23 (resultados.json, XML, KuDE, capturas del QR y certificado-invalido.txt).
+- **Estado al 23/11/2026 (mañana, grupo 1):** cumplidos FE, NC y ND sincrónicos (aprobados y rechazados), las consultas por CDC, el KuDE, la carga del QR y la prueba con certificado no válido.
+- **Estado al 23/11/2026 (tarde, grupo 2):** se implementaron y probaron contra el SIFEN de test el envío asincrónico por lote (`siRecepLoteDE` + `siResultLoteDE`, documentos FIRMADO → lote → resultado) y los eventos del emisor (`siRecepEvento`: cancelación de documentos aprobados con plazo de 48 h / 168 h, e inutilización del número de documentos rechazados; estados nuevos CANCELADO e INUTILIZADO, migración V11). Cumplidos: **asincrónico aprobado y rechazado para FE, NC y ND** (6 lotes, 30 DE), **5 cancelaciones** e **inutilización de 2 FE, 1 NC y 1 ND**.
+- **Pendientes:** **confirmar a mano las 6 consultas por QR** (requieren reCAPTCHA); **eventos del receptor** (conformidad, disconformidad, desconocimiento, notificación, ajuste: requieren documentos recibidos de otro emisor); **autofactura y nota de remisión** (y la inutilización de 1 autofactura). Hay que confirmar con la DNIT si estos dos tipos y los eventos del receptor corresponden a un contribuyente que no los emite.
+- **Evidencia:** TFG/fuente/habilitacion/evidencia-2026-11-23 (grupo 1: resultados.json, XML, KuDE, capturas del QR y certificado-invalido.txt) y evidencia-grupo2-2026-11-23 (eventos y lotes en JSON, resultados.json).

@@ -1,7 +1,9 @@
 package com.tottalstore.sifen.facturacion;
 
 import com.tottalstore.sifen.facturacion.dto.FacturaRequest;
+import com.tottalstore.sifen.facturacion.dto.EventoResponse;
 import com.tottalstore.sifen.facturacion.dto.FacturaResponse;
+import com.tottalstore.sifen.facturacion.dto.MotivoEventoRequest;
 import jakarta.validation.Valid;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -25,10 +27,12 @@ public class FacturaController {
 
     private final FacturaService facturaService;
     private final FacturaPdfGenerator facturaPdfGenerator;
+    private final EventosService eventosService;
 
-    public FacturaController(FacturaService facturaService, FacturaPdfGenerator facturaPdfGenerator) {
+    public FacturaController(FacturaService facturaService, FacturaPdfGenerator facturaPdfGenerator, EventosService eventosService) {
         this.facturaService = facturaService;
         this.facturaPdfGenerator = facturaPdfGenerator;
+        this.eventosService = eventosService;
     }
 
     /** Facturas y notas de crédito/débito; {@code tipo} filtra por tipo de documento. */
@@ -80,6 +84,29 @@ public class FacturaController {
     @PostMapping("/{id}/reabrir")
     public FacturaResponse reabrir(@PathVariable UUID id) {
         return FacturaResponse.from(facturaService.reabrir(id));
+    }
+
+    /** Envío asíncrono: valida, numera y firma el borrador, que queda FIRMADO hasta mandarlo en un lote. */
+    @PostMapping("/{id}/firmar-lote")
+    public FacturaResponse firmarParaLote(@PathVariable UUID id) {
+        return FacturaResponse.from(facturaService.firmarParaLote(id));
+    }
+
+    /** Evento de cancelación (siRecepEvento) de un documento aprobado. Solo ADMIN (SecurityConfig). */
+    @PostMapping("/{id}/cancelar")
+    public EventoResponse cancelar(@PathVariable UUID id, @Valid @RequestBody MotivoEventoRequest request) {
+        return EventoResponse.from(eventosService.cancelar(id, request.motivo()));
+    }
+
+    /** Evento de inutilización (siRecepEvento) del número de un documento rechazado. Solo ADMIN. */
+    @PostMapping("/{id}/inutilizar")
+    public EventoResponse inutilizar(@PathVariable UUID id, @Valid @RequestBody MotivoEventoRequest request) {
+        return EventoResponse.from(eventosService.inutilizar(id, request.motivo()));
+    }
+
+    @GetMapping("/{id}/eventos")
+    public List<EventoResponse> eventos(@PathVariable UUID id) {
+        return eventosService.eventosDe(id).stream().map(EventoResponse::from).toList();
     }
 
     @GetMapping("/{id}/xml")

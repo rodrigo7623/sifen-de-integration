@@ -1,5 +1,5 @@
 import { apiClient } from "../../api/client";
-import type { CondicionPago, EstadoDte, Factura, MotivoNota, TasaIva, TipoDocumento } from "../../api/types";
+import type { CondicionPago, EstadoDte, EventoSifen, Factura, MotivoNota, TasaIva, TipoDocumento } from "../../api/types";
 
 export interface ItemFacturaInput {
   productoCodigo: string | null;
@@ -71,6 +71,14 @@ export const facturasApi = {
   },
   async reabrir(id: string): Promise<Factura> {
     const { data } = await apiClient.post<Factura>(`/facturas/${id}/reabrir`, {});
+    return data;
+  },
+  async cancelar(id: string, motivo: string): Promise<EventoSifen> {
+    const { data } = await apiClient.post<EventoSifen>(`/facturas/${id}/cancelar`, { motivo });
+    return data;
+  },
+  async inutilizar(id: string, motivo: string): Promise<EventoSifen> {
+    const { data } = await apiClient.post<EventoSifen>(`/facturas/${id}/inutilizar`, { motivo });
     return data;
   },
   async descargarPdf(id: string): Promise<Blob> {

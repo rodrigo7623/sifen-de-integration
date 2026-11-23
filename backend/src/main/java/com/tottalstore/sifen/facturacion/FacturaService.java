@@ -32,7 +32,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,6 +52,9 @@ public class FacturaService {
      * (dFecFirma). La firma se hace al confirmar, en el mismo momento que se fija fechaEmision.
      */
     public static final Duration PLAZO_TRANSMISION = Duration.ofHours(72);
+
+    /** Documentos que no existen (o ya no tienen efecto) en el SIFEN: no cuentan contra el saldo de la factura. */
+    static final Set<EstadoDte> SIN_EFECTO = EnumSet.of(EstadoDte.RECHAZADO, EstadoDte.CANCELADO, EstadoDte.INUTILIZADO);
 
     private final FacturaRepository facturaRepository;
     private final ClienteRepository clienteRepository;
@@ -237,7 +242,7 @@ public class FacturaService {
     BigDecimal saldoAcreditable(FacturaElectronica factura, UUID excluir) {
         BigDecimal acreditado = facturaRepository.findByFacturaAsociadaIdOrderByFechaEmisionAsc(factura.getId()).stream()
                 .filter(n -> n.getTipoDoc() == TipoDocumento.NC)
-                .filter(n -> n.getEstadoDte() != EstadoDte.RECHAZADO)
+                .filter(n -> !SIN_EFECTO.contains(n.getEstadoDte()))
                 .filter(n -> !n.getId().equals(excluir))
                 .map(FacturaElectronica::getTotalGeneral)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -266,6 +271,49 @@ public class FacturaService {
         FacturaElectronica factura = obtenerParaActualizar(id);
         exigirEstado(factura, EstadoDte.BORRADOR, "confirmar y enviar");
 
+        Ambiente ambiente = ambienteActual();
+        DteFirmado firmado = firmar(factura, ambiente);
+
+        // CU-04: envío al SIFEN (ver EnviadorSifenService).
+        factura.setEstadoDte(EstadoDte.ENVIADO_SIFEN);
+        RespuestaSifenResult resultado = enviadorSifenService.enviar(factura.getId(), firmado.xmlFirmado(), ambiente);
+        return registrarResultado(factura, resultado, firmado.xmlFirmado(), ambiente, true);
+    }
+
+    /**
+     * Envío asíncrono (siRecepLoteDE): el documento se valida, numera y firma ahora y queda FIRMADO
+     * hasta que se lo incluya en un lote ({@link LoteService}). El XML firmado se guarda para enviarlo
+     * tal cual; el SIFEN lo acepta hasta 72 h después de la firma (Manual Técnico 6.2).
+     */
+    @Transactional
+    public FacturaElectronica firmarParaLote(UUID id) {
+        FacturaElectronica factura = obtenerParaActualizar(id);
+        exigirEstado(factura, EstadoDte.BORRADOR, "firmar para envío por lote");
+
+        DteFirmado firmado = firmar(factura, ambienteActual());
+        RespuestaSifen respuesta = factura.getRespuestaSifen() != null ? factura.getRespuestaSifen() : new RespuestaSifen();
+        respuesta.setFactura(factura);
+        respuesta.setCodigo(null);
+        respuesta.setDescripcion("Firmado: pendiente de envío por lote");
+        respuesta.setCdc(null);
+        respuesta.setXmlFirmado(firmado.xmlFirmado());
+        respuesta.setFechaRespuesta(Instant.now());
+        respuestaSifenRepository.save(respuesta);
+        factura.setRespuestaSifen(respuesta);
+        factura.setLote(null);
+
+        FacturaElectronica guardada = facturaRepository.save(factura);
+        auditoriaService.registrar("FIRMADO_PARA_LOTE", currentUser.obtener(), guardada);
+        return guardada;
+    }
+
+    /** Resultado de un DE dentro de un lote ya procesado: mismo efecto que la respuesta del envío sincrónico. */
+    FacturaElectronica registrarResultadoDeLote(FacturaElectronica factura, RespuestaSifenResult resultado, Ambiente ambiente) {
+        return registrarResultado(factura, resultado, factura.getRespuestaSifen().getXmlFirmado(), ambiente, true);
+    }
+
+    /** CU-05 (validación), numeración y CU-03 (XML + firma). Deja el documento FIRMADO. */
+    private DteFirmado firmar(FacturaElectronica factura, Ambiente ambiente) {
         // CU-05: validación de campos críticos antes del envío (flujo alternativo 3a de CU-01/CU-02).
         factura.setEstadoDte(EstadoDte.EN_VALIDACION);
         validarParaEnvio(factura);
@@ -276,16 +324,11 @@ public class FacturaService {
         factura.setFechaEmision(Instant.now());
 
         // CU-03: generación del XML del DE y firma digital (ver GeneradorDteService).
-        Ambiente ambiente = ambienteActual();
         DteFirmado firmado = generadorDteService.generar(factura, ambiente);
         factura.setCdc(firmado.cdc());
         factura.setCodigoSeguridad(firmado.codigoSeguridad());
         factura.setEstadoDte(EstadoDte.FIRMADO);
-
-        // CU-04: envío al SIFEN (ver EnviadorSifenService).
-        factura.setEstadoDte(EstadoDte.ENVIADO_SIFEN);
-        RespuestaSifenResult resultado = enviadorSifenService.enviar(factura.getId(), firmado.xmlFirmado(), ambiente);
-        return registrarResultado(factura, resultado, firmado.xmlFirmado(), ambiente, true);
+        return firmado;
     }
 
     /**
@@ -525,7 +568,7 @@ public class FacturaService {
         }
     }
 
-    private Ambiente ambienteActual() {
+    Ambiente ambienteActual() {
         return enviadorSifenConfigRepository.findAll().stream()
                 .findFirst()
                 .map(EnviadorSifenConfig::getAmbiente)

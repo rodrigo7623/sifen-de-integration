@@ -61,7 +61,9 @@ export type EstadoDte =
   | "RECHAZADO"
   | "EN_PROCESO"
   | "EN_CORRECCION"
-  | "ANULADO";
+  | "ANULADO"
+  | "CANCELADO"
+  | "INUTILIZADO";
 
 export const ESTADO_DTE_LABEL: Record<EstadoDte, string> = {
   BORRADOR: "Borrador",
@@ -73,7 +75,24 @@ export const ESTADO_DTE_LABEL: Record<EstadoDte, string> = {
   EN_PROCESO: "En proceso",
   EN_CORRECCION: "En corrección",
   ANULADO: "Anulado",
+  CANCELADO: "Cancelado",
+  INUTILIZADO: "Inutilizado",
 };
+
+/** Evento del emisor enviado al SIFEN (cancelación o inutilización). */
+export interface EventoSifen {
+  id: number;
+  tipo: "CANCELACION" | "INUTILIZACION";
+  facturaId: string;
+  numero: string | null;
+  motivo: string;
+  fecha: string;
+  estado: "PENDIENTE" | "APROBADO" | "RECHAZADO" | "SIN_CONFIRMAR";
+  codigo: string | null;
+  mensaje: string | null;
+  protocolo: string | null;
+  estadoDocumento: EstadoDte;
+}
 
 /** C002 del Manual Técnico: factura, nota de crédito, nota de débito. */
 export type TipoDocumento = "FE" | "NC" | "ND";

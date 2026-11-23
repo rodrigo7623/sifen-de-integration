@@ -73,6 +73,12 @@ sifen:
     # WS de consulta de DE por CDC (siConsDE), para resolver los envíos que quedaron sin respuesta.
     # Producción: https://sifen.set.gov.py/de/ws/consultas/consulta.wsdl
     url-consulta-de: ${SIFEN_ENVIO_URL_CONSULTA_DE:https://sifen-test.set.gov.py/de/ws/consultas/consulta.wsdl}
+    # Eventos del emisor (siRecepEvento, 9.5). Producción: https://sifen.set.gov.py/de/ws/eventos/evento.wsdl
+    url-evento: ${SIFEN_ENVIO_URL_EVENTO:https://sifen-test.set.gov.py/de/ws/eventos/evento.wsdl}
+    # Envío asíncrono por lote (siRecepLoteDE, 9.2) y su resultado (siResultLoteDE, 9.3).
+    # Producción: https://sifen.set.gov.py/de/ws/async/recibe-lote.wsdl y .../consultas/consulta-lote.wsdl
+    url-lote: ${SIFEN_ENVIO_URL_LOTE:https://sifen-test.set.gov.py/de/ws/async/recibe-lote.wsdl}
+    url-consulta-lote: ${SIFEN_ENVIO_URL_CONSULTA_LOTE:https://sifen-test.set.gov.py/de/ws/consultas/consulta-lote.wsdl}
     # Historial append-only de cada intento real contra el SIFEN (aprobado, rechazado o con error de
     # conexión) — para poder mostrar cómo fue avanzando la integración a lo largo del tiempo.
     historial-path: ${SIFEN_ENVIO_HISTORIAL_PATH:./sifen-envios-historial.jsonl}
